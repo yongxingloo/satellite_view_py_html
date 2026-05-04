@@ -28,6 +28,8 @@ const playerImage = document.querySelector("#playerImage");
 const playerPlaceholder = document.querySelector("#playerPlaceholder");
 const playerTitle = document.querySelector("#playerTitle");
 const playerSubtitle = document.querySelector("#playerSubtitle");
+const fileNameText = document.querySelector("#fileNameText");
+const fileUrlText = document.querySelector("#fileUrlText");
 const downloadLink = document.querySelector("#downloadLink");
 
 const map = L.map("map", { zoomControl: true }).setView(config.default_center, config.default_zoom);
@@ -61,9 +63,12 @@ const state = {
   anchorLatLng: null,
   drawing: false,
   items: [],
+  resultCards: [],
+  timelineDots: [],
   selectedIndex: -1,
   playing: false,
-  playTimer: null
+  playTimer: null,
+  previewStatus: new Map()
 };
 
 function setStatus(message) {
@@ -186,6 +191,62 @@ function formatSceneDate(value) {
   return value.slice(0, 10);
 }
 
+function differenceInDays(start, end) {
+  return Math.max(0, Math.round((new Date(end) - new Date(start)) / 86400000));
+}
+
+function resolveScenePreviewUrl(scene) {
+  return scene?.frame_url || scene?.fallback_frame_url || "";
+}
+
+function getSceneFileName(scene) {
+  const previewUrl = resolveScenePreviewUrl(scene);
+  if (!previewUrl) {
+    return "No preview file";
+  }
+  return previewUrl.split("/").pop().split("?")[0] || "preview-file";
+}
+
+function markPreviewStatus(url, status) {
+  if (url) {
+    state.previewStatus.set(url, status);
+  }
+}
+
+function preloadPreviewUrl(url) {
+  if (!url) {
+    return Promise.reject(new Error("No preview URL available."));
+  }
+
+  const knownStatus = state.previewStatus.get(url);
+  if (knownStatus === "ready") {
+    return Promise.resolve(url);
+  }
+  if (knownStatus === "error") {
+    return Promise.reject(new Error("Preview file could not be loaded."));
+  }
+
+  return new Promise((resolve, reject) => {
+    const probe = new Image();
+    const timeoutId = window.setTimeout(() => {
+      markPreviewStatus(url, "error");
+      reject(new Error("Preview file timed out while loading."));
+    }, 8000);
+
+    probe.onload = () => {
+      window.clearTimeout(timeoutId);
+      markPreviewStatus(url, "ready");
+      resolve(url);
+    };
+    probe.onerror = () => {
+      window.clearTimeout(timeoutId);
+      markPreviewStatus(url, "error");
+      reject(new Error("Preview file could not be loaded."));
+    };
+    probe.src = url;
+  });
+}
+
 function renderStats(stats) {
   const cards = [
     { label: "Scenes", value: stats.scene_count ?? 0, note: "Frames in sequence" },
@@ -203,6 +264,7 @@ function renderStats(stats) {
 }
 
 function renderTimeline() {
+  state.timelineDots = [];
   timelineScale.innerHTML = "";
   timelineTrack.innerHTML = "";
 
@@ -211,30 +273,71 @@ function renderTimeline() {
     return;
   }
 
-  const first = state.items[0];
-  const last = state.items[state.items.length - 1];
-  timelineScale.innerHTML = `<span>${formatSceneDate(first.datetime)}</span><span>${formatSceneDate(last.datetime)}</span>`;
+  const datedScenes = state.items
+    .map((scene, index) => ({ scene, index }))
+    .filter((entry) => entry.scene.datetime)
+    .sort((left, right) => new Date(left.scene.datetime) - new Date(right.scene.datetime));
 
-  if (state.items.length === 1) {
+  const firstEntry = datedScenes[0] || { scene: state.items[0], index: 0 };
+  const lastEntry = datedScenes[datedScenes.length - 1] || { scene: state.items[state.items.length - 1], index: state.items.length - 1 };
+  const totalDays = datedScenes.length > 1 ? differenceInDays(firstEntry.scene.datetime, lastEntry.scene.datetime) : 0;
+
+  timelineScale.innerHTML = `
+    <span>${formatSceneDate(firstEntry.scene.datetime)}</span>
+    <span>${totalDays ? `${totalDays} days` : "Single day"}</span>
+    <span>${formatSceneDate(lastEntry.scene.datetime)}</span>
+  `;
+
+  if (datedScenes.length <= 1) {
     const dot = document.createElement("button");
     dot.type = "button";
     dot.className = "timeline-dot active";
     dot.style.left = "50%";
-    dot.addEventListener("click", () => selectScene(0, false));
+    dot.title = firstEntry.scene ? `${formatSceneDate(firstEntry.scene.datetime)} ${firstEntry.scene.id}` : "Scene";
+    dot.addEventListener("click", () => selectScene(firstEntry.index, false));
     timelineTrack.append(dot);
+    state.timelineDots.push(dot);
     return;
   }
 
-  state.items.forEach((scene, index) => {
-    const position = (index / (state.items.length - 1)) * 100;
+  const firstTime = new Date(firstEntry.scene.datetime).getTime();
+  const lastTime = new Date(lastEntry.scene.datetime).getTime();
+  const spanMs = Math.max(1, lastTime - firstTime);
+
+  datedScenes.forEach(({ scene, index }) => {
+    const position = ((new Date(scene.datetime).getTime() - firstTime) / spanMs) * 100;
     const dot = document.createElement("button");
     dot.type = "button";
     dot.className = `timeline-dot${index === state.selectedIndex ? " active" : ""}`;
-    dot.style.left = `${position}%`;
+    dot.style.left = `calc(1rem + (${position} * (100% - 2rem) / 100))`;
     dot.title = `${formatSceneDate(scene.datetime)} ${scene.id}`;
     dot.addEventListener("click", () => selectScene(index, false));
     timelineTrack.append(dot);
+    state.timelineDots.push(dot);
   });
+}
+
+function updateSelectionStyles() {
+  state.resultCards.forEach((card, index) => {
+    card.classList.toggle("active", index === state.selectedIndex);
+  });
+  state.timelineDots.forEach((dot, index) => {
+    dot.classList.toggle("active", index === state.selectedIndex);
+  });
+}
+
+function updateHighlightedScene(focusMap) {
+  const selected = state.items[state.selectedIndex];
+  highlightedLayer.clearLayers();
+  if (selected && selected.geometry) {
+    highlightedLayer.addData(selected.geometry);
+    if (focusMap) {
+      const bounds = highlightedLayer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.25));
+      }
+    }
+  }
 }
 
 function renderPlayer() {
@@ -245,18 +348,25 @@ function renderPlayer() {
     playerPlaceholder.hidden = false;
     playerTitle.textContent = "No frame selected";
     playerSubtitle.textContent = "Awaiting overpass search";
+    fileNameText.textContent = "No file selected";
+    fileUrlText.textContent = "Run a search to inspect the individual preview file for a frame.";
     downloadLink.hidden = true;
     return;
   }
 
   const selected = state.items[state.selectedIndex];
-  const frameUrl = selected.frame_url || selected.fallback_frame_url;
+  const frameUrl = resolveScenePreviewUrl(selected);
+  const fileName = getSceneFileName(selected);
   playerTitle.textContent = `${state.selectedIndex + 1} / ${state.items.length}  ${formatSceneDate(selected.datetime)}`;
   playerSubtitle.textContent = `${selected.collection} - ${selected.id} - coverage ${(selected.coverage_score * 100).toFixed(0)}%`;
   timelineInput.value = String(state.selectedIndex);
+  fileNameText.textContent = fileName;
+  fileUrlText.textContent = frameUrl || "This scene does not expose a direct preview file.";
 
   if (frameUrl) {
-    playerImage.src = frameUrl;
+    if (playerImage.src !== frameUrl) {
+      playerImage.src = frameUrl;
+    }
     playerImage.style.display = "block";
     playerPlaceholder.hidden = true;
     downloadLink.href = frameUrl;
@@ -270,6 +380,7 @@ function renderPlayer() {
 }
 
 function renderResults() {
+  state.resultCards = [];
   footprintLayer.clearLayers();
   highlightedLayer.clearLayers();
   resultsList.innerHTML = "";
@@ -285,46 +396,94 @@ function renderResults() {
     if (scene.geometry) {
       footprintLayer.addData(scene.geometry);
     }
+    const previewUrl = resolveScenePreviewUrl(scene);
+    const thumbnailMarkup = previewUrl
+      ? `<img class="result-thumb" src="${previewUrl}" alt="Preview for ${scene.id}" loading="lazy">`
+      : `<div class="result-thumb result-thumb-empty">No preview</div>`;
     const card = document.createElement("article");
-    card.className = `result-card${index === state.selectedIndex ? " active" : ""}`;
+    card.className = "result-card";
     card.innerHTML = `
+      ${thumbnailMarkup}
       <div class="result-content">
         <h3>${formatSceneDate(scene.datetime)}</h3>
         <p>${scene.collection} - ${scene.id}</p>
+        <p>${getSceneFileName(scene)}</p>
         <p>Coverage ${(scene.coverage_score * 100).toFixed(0)}% - Cloud ${scene.cloud_cover == null ? "--" : `${scene.cloud_cover}%`}</p>
       </div>
     `;
     card.addEventListener("click", () => selectScene(index, true));
     resultsList.append(card);
+    state.resultCards.push(card);
   });
 
   renderTimeline();
+  updateHighlightedScene(false);
+  updateSelectionStyles();
   renderPlayer();
 }
 
 function selectScene(index, focusMap) {
   state.selectedIndex = index;
-  const selected = state.items[index];
-  highlightedLayer.clearLayers();
-  if (selected && selected.geometry) {
-    highlightedLayer.addData(selected.geometry);
-    if (focusMap) {
-      const bounds = highlightedLayer.getBounds();
-      if (bounds.isValid()) {
-        map.fitBounds(bounds.pad(0.25));
-      }
-    }
-  }
-  renderResults();
+  updateHighlightedScene(focusMap);
+  updateSelectionStyles();
+  renderPlayer();
 }
 
 function stopPlayback() {
   state.playing = false;
   playButton.textContent = "Play";
   if (state.playTimer) {
-    window.clearInterval(state.playTimer);
+    window.clearTimeout(state.playTimer);
     state.playTimer = null;
   }
+}
+
+function findNextIndex(startIndex) {
+  if (!state.items.length) {
+    return -1;
+  }
+  return (startIndex + 1) % state.items.length;
+}
+
+async function advancePlayback() {
+  if (!state.playing || state.items.length < 2) {
+    return;
+  }
+
+  let attempts = 0;
+  let nextIndex = state.selectedIndex;
+
+  while (attempts < state.items.length) {
+    nextIndex = findNextIndex(nextIndex);
+    const scene = state.items[nextIndex];
+    const previewUrl = resolveScenePreviewUrl(scene);
+
+    if (!previewUrl) {
+      attempts += 1;
+      continue;
+    }
+
+    try {
+      await preloadPreviewUrl(previewUrl);
+      if (!state.playing) {
+        return;
+      }
+      selectScene(nextIndex, false);
+      const intervalMs = Math.max(220, 1000 / Number(speedInput.value || 2));
+      state.playTimer = window.setTimeout(() => {
+        advancePlayback().catch((error) => {
+          setStatus(error.message);
+          stopPlayback();
+        });
+      }, intervalMs);
+      return;
+    } catch (_error) {
+      attempts += 1;
+    }
+  }
+
+  setStatus("Playback stopped because no additional preview files could be loaded.");
+  stopPlayback();
 }
 
 function startPlayback() {
@@ -333,11 +492,10 @@ function startPlayback() {
   }
   state.playing = true;
   playButton.textContent = "Pause";
-  const intervalMs = Math.max(160, 1000 / Number(speedInput.value || 2));
-  state.playTimer = window.setInterval(() => {
-    const nextIndex = (state.selectedIndex + 1) % state.items.length;
-    selectScene(nextIndex, false);
-  }, intervalMs);
+  advancePlayback().catch((error) => {
+    setStatus(error.message);
+    stopPlayback();
+  });
 }
 
 function togglePlayback() {
@@ -384,6 +542,7 @@ async function searchScenes() {
       bbox: state.bbox
     });
     const data = await response.json();
+    state.previewStatus = new Map();
     state.items = data.scenes;
     state.selectedIndex = state.items.length ? 0 : -1;
     setResultCount(state.items.length);
@@ -500,6 +659,28 @@ map.on("mousemove", (event) => {
     return;
   }
   state.tempRectangle.setBounds(L.latLngBounds(state.anchorLatLng, event.latlng));
+});
+
+playerImage.addEventListener("load", () => {
+  markPreviewStatus(playerImage.currentSrc, "ready");
+});
+
+playerImage.addEventListener("error", () => {
+  const selected = state.items[state.selectedIndex];
+  const previewUrl = resolveScenePreviewUrl(selected);
+  markPreviewStatus(previewUrl, "error");
+  playerImage.style.display = "none";
+  playerImage.removeAttribute("src");
+  playerPlaceholder.hidden = false;
+  fileUrlText.textContent = previewUrl
+    ? `This preview file failed to load: ${previewUrl}`
+    : "This scene does not expose a direct preview file.";
+  if (state.playing) {
+    advancePlayback().catch((error) => {
+      setStatus(error.message);
+      stopPlayback();
+    });
+  }
 });
 
 renderStats({ scene_count: 0, range_label: "--", average_revisit_days: null, average_cloud_cover: null });
