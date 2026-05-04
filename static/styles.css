@@ -1,8 +1,8 @@
 /* Global design tokens used across the app. */
 :root {
-  --bg-top: #0b2238;
-  --bg-mid: #7fb6c9;
-  --bg-bottom: #f1e6c8;
+  --bg-top: #ffffff;
+  --bg-mid: #ffffff;
+  --bg-bottom: #ffffff;
   --panel: rgba(255, 252, 246, 0.94);
   --panel-strong: #fffdf8;
   --ink: #14202b;
@@ -25,7 +25,7 @@ body {
   color: var(--ink);
   font-family: "Manrope", "Segoe UI", sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.2), transparent 28%),
+    radial-gradient(circle at top left, rgba(20, 32, 43, 0.04), transparent 28%),
     linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 50%, var(--bg-bottom) 100%);
 }
 
@@ -49,7 +49,6 @@ select {
   border-radius: 22px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
 }
 
 .hero-panel {
@@ -557,6 +556,8 @@ select {
 .results-list {
   display: grid;
   gap: 0.7rem;
+  content-visibility: auto;
+  contain-intrinsic-size: 800px;
 }
 
 .result-card {
@@ -569,6 +570,8 @@ select {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.52);
   cursor: pointer;
+  content-visibility: auto;
+  contain: layout paint style;
 }
 
 .result-card.active {
@@ -592,6 +595,7 @@ select {
   object-fit: cover;
   display: block;
   background: rgba(20, 32, 43, 0.08);
+  image-rendering: auto;
 }
 
 .result-thumb-empty {

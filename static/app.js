@@ -425,8 +425,9 @@ function renderResults() {
       footprintLayer.addData(scene.geometry);
     }
     const previewUrl = resolveScenePreviewUrl(scene);
-    const thumbnailMarkup = previewUrl
-      ? `<img class="result-thumb" src="${previewUrl}" alt="Preview for ${scene.id}" loading="lazy">`
+    const thumbnailUrl = scene.fallback_frame_url || previewUrl;
+    const thumbnailMarkup = thumbnailUrl
+      ? `<img class="result-thumb" src="${thumbnailUrl}" alt="Preview for ${scene.id}" loading="lazy" decoding="async">`
       : `<div class="result-thumb result-thumb-empty">No preview</div>`;
     const card = document.createElement("article");
     card.className = "result-card";
