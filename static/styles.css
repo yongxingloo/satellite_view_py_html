@@ -1,0 +1,718 @@
+/* Global design tokens used across the app. */
+:root {
+  --bg-top: #ffffff;
+  --bg-mid: #ffffff;
+  --bg-bottom: #ffffff;
+  --panel: rgba(255, 252, 246, 0.94);
+  --panel-strong: #fffdf8;
+  --ink: #14202b;
+  --muted: #475569;
+  --line: #d8d5c8;
+  --line-strong: #bba672;
+  --accent: #173b63;
+  --accent-strong: #8f4d26;
+  --shadow: 0 16px 34px rgba(20, 32, 43, 0.12);
+}
+
+/* Basic page-wide resets and typography defaults. */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: "Manrope", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(20, 32, 43, 0.04), transparent 28%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 50%, var(--bg-bottom) 100%);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+/* Overall page layout containers. */
+.page-shell {
+  width: min(1280px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.5rem 0 2rem;
+}
+
+/* Shared panel framing for the glass-like card look. */
+.hero-panel,
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.hero-panel {
+  padding: 1.75rem;
+  margin-bottom: 1rem;
+}
+
+.eyebrow,
+.panel-kicker,
+.status-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.hero-panel h1,
+.panel-heading h2,
+.result-content h3 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.hero-panel h1 {
+  margin-top: 0.45rem;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+}
+
+.hero-copy,
+.panel-copy,
+.result-content p,
+.empty-state {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.hero-copy {
+  max-width: 46rem;
+  margin: 0.85rem 0 0;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.panel {
+  padding: 1rem;
+}
+
+.controls-panel,
+.results-panel {
+  grid-column: 1;
+}
+
+.map-panel,
+.analytics-panel,
+.media-row {
+  grid-column: 2;
+}
+
+.media-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.panel-heading.compact {
+  margin-bottom: 0.8rem;
+}
+
+.panel-heading h2 {
+  margin-top: 0.2rem;
+  font-size: 1.25rem;
+}
+
+.panel-copy {
+  max-width: 24rem;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+/* Form controls and compact tooltip helpers. */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field span,
+.inline-field span {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.inline-info {
+  position: relative;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 248, 0.95);
+  color: var(--accent);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: help;
+}
+
+.inline-info:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(23, 59, 99, 0.12);
+}
+
+/* Reusable tooltip used by both field help and area-selection help. */
+.inline-popover {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 60;
+  width: min(16rem, 70vw);
+  min-width: 12rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid rgba(23, 59, 99, 0.1);
+  background: rgba(20, 32, 43, 0.96);
+  color: #f7f7f5;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: normal;
+  overflow-wrap: break-word;
+  box-shadow: 0 12px 24px rgba(20, 32, 43, 0.28);
+}
+
+.inline-popover,
+.inline-popover * {
+  color: #f7f7f5;
+}
+
+.field .inline-popover,
+.field .inline-popover *,
+.field-label .inline-popover,
+.field-label .inline-popover * {
+  color: #f7f7f5;
+}
+
+.inline-info:hover .inline-popover,
+.inline-info:focus .inline-popover,
+.inline-info:focus-within .inline-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.field input,
+.field select,
+.field output,
+.inline-field input,
+.button,
+.download-link {
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--ink);
+}
+
+.field input,
+.field select,
+.field output {
+  min-height: 2.9rem;
+  padding: 0.78rem 0.9rem;
+}
+
+.field output {
+  display: flex;
+  align-items: center;
+}
+
+.field input:focus,
+.field select:focus,
+.button:focus,
+.inline-field input:focus,
+.download-link:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(23, 59, 99, 0.12);
+}
+
+/* Buttons, status cards, and general control chrome. */
+.action-row,
+.player-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.button,
+.map-toggle,
+.mini-link {
+  padding: 0.82rem 1rem;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  text-decoration: none;
+}
+
+.button:hover,
+.map-toggle:hover,
+.mini-link:hover {
+  transform: translateY(-1px);
+}
+
+.button-primary,
+.button-strong,
+.map-toggle.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.button:not(.button-primary):not(.button-strong),
+.map-toggle {
+  background: rgba(255, 253, 248, 0.88);
+}
+
+.status-strip,
+.player-meta,
+.file-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(23, 59, 99, 0.08);
+}
+
+.file-panel {
+  grid-template-columns: 1fr;
+  padding: 0.8rem 0.95rem;
+}
+
+.file-panel strong,
+.file-panel p {
+  min-width: 0;
+}
+
+.file-url {
+  margin: 0.1rem 0 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Selected file URL cards shown below the preview. */
+.url-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.2rem;
+}
+
+.url-card {
+  padding: 0.72rem 0.78rem;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 59, 99, 0.08);
+  background: rgba(255, 255, 255, 0.55);
+  min-width: 0;
+}
+
+.url-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.mini-link {
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 248, 0.88);
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.url-code {
+  display: block;
+  margin: 0;
+  padding: 0.58rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(20, 32, 43, 0.08);
+  color: var(--ink);
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Area-selection toolbar placed above the map for discoverability. */
+.map-toolbar {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.area-toolbar {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(23, 59, 99, 0.08);
+}
+
+.area-toolbar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.area-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.area-output-wrap {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.area-output {
+  display: flex;
+  align-items: center;
+  min-height: 2.9rem;
+  padding: 0.78rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--muted);
+}
+
+.info-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 248, 0.95);
+  color: var(--accent);
+  font-size: 0.82rem;
+  cursor: help;
+}
+
+.info-chip:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(23, 59, 99, 0.12);
+}
+
+.info-popover {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  z-index: 30;
+  width: min(18rem, 70vw);
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(23, 59, 99, 0.1);
+  background: rgba(20, 32, 43, 0.96);
+  color: #f7f7f5;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.info-chip:hover .info-popover,
+.info-chip:focus .info-popover,
+.info-chip:focus-within .info-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.map-toggle {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.map-frame {
+  min-height: 430px;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.analytics-grid,
+.timeline-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.stat-card {
+  padding: 0.95rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(23, 59, 99, 0.08);
+}
+
+.stat-card strong {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 1.3rem;
+}
+
+.stat-card p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+}
+
+.timeline-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Analytics timeline styling and timeline dots. */
+.timeline-track {
+  position: relative;
+  min-height: 48px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(23, 59, 99, 0.18), rgba(143, 77, 38, 0.18));
+}
+
+.timeline-dot {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.timeline-dot.active {
+  background: var(--accent-strong);
+  width: 16px;
+  height: 16px;
+}
+
+/* Scene cards and their thumbnail previews. */
+.results-list {
+  display: grid;
+  gap: 0.7rem;
+  content-visibility: auto;
+  contain-intrinsic-size: 800px;
+}
+
+.results-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.results-page-label {
+  flex: 1;
+  color: var(--muted-text);
+  font-size: 0.92rem;
+  text-align: center;
+}
+
+.result-card {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+  padding: 0.95rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.52);
+  cursor: pointer;
+  content-visibility: auto;
+  contain: layout paint style;
+}
+
+.result-card.active {
+  border-color: var(--accent);
+  background: rgba(23, 59, 99, 0.08);
+}
+
+.result-content h3 {
+  font-size: 1rem;
+}
+
+.result-content p {
+  margin: 0.3rem 0 0;
+  font-size: 0.92rem;
+}
+
+.result-thumb {
+  width: 92px;
+  height: 92px;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+  background: rgba(20, 32, 43, 0.08);
+  image-rendering: auto;
+}
+
+.result-thumb-empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+  padding: 0.4rem;
+}
+
+/* Player stage and compact export controls. */
+.player-stage {
+  min-height: 480px;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(20, 32, 43, 0.18), rgba(20, 32, 43, 0.06));
+}
+
+.player-stage img {
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-placeholder {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.inline-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.inline-field.grow {
+  flex: 1;
+  min-width: 180px;
+}
+
+.mini-link[hidden] {
+  display: none;
+}
+
+/* Responsive adjustments for tablet/mobile layouts. */
+@media (max-width: 960px) {
+  .workspace-grid,
+  .media-row {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-panel,
+  .results-panel,
+  .map-panel,
+  .analytics-panel,
+  .media-row {
+    grid-column: auto;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-stage {
+    min-height: 320px;
+  }
+
+  .result-card {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .result-thumb {
+    width: 76px;
+    height: 76px;
+  }
+
+  .url-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .area-toolbar-head {
+    align-items: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-shell {
+    width: min(100% - 1rem, 1280px);
+  }
+
+  .panel-heading,
+  .status-strip,
+  .player-meta {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<!-- Main HTML shell for the satellite timelapse application. -->
+<html lang="en">
+<head>
+  <!-- Basic document metadata and responsive scaling. -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Satellite Timelapse</title>
+  <!-- Typography and map stylesheet dependencies. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <!-- Page shell containing the hero, controls, map, analytics, results, and preview. -->
+  <main class="page-shell">
+    <section class="hero-panel">
+      <p class="eyebrow">Satellite Timelapse</p>
+      <h1>satelliteview</h1>
+      <p class="hero-copy">
+        Pick an area, load satellite images, and play them back as a timelapse.
+        It is a simple way to look at how a place changes over time.
+      </p>
+    </section>
+
+    <section class="workspace-grid">
+      <!-- Search/filter controls that drive the backend search request. -->
+      <section class="panel controls-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">Search</p>
+            <h2>Settings</h2>
+          </div>
+          <p class="panel-copy">Set a time range and a few filters, then search.</p>
+        </div>
+
+        <!-- Main filter form. Each field is paired with a small inline help tooltip. -->
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">Collection <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Pick which satellite data to search.</span></span></span>
+            <select id="collectionSelect">
+              <option value="sentinel-2-l2a" selected>Sentinel-2 L2A</option>
+              <option value="landsat-c2-l2">Landsat</option>
+              <option value="merged">Merged (Sentinel + Landsat)</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Start date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">The first date to include in the search.</span></span></span>
+            <input id="startDateInput" type="date" value="{{ initial_state.default_start_date }}">
+          </label>
+
+          <label class="field">
+            <span class="field-label">End date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">The last date to include in the search.</span></span></span>
+            <input id="endDateInput" type="date" value="{{ initial_state.default_end_date }}">
+          </label>
+
+          <label class="field">
+            <span class="field-label">Cloud cover max (%) <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Lower values usually mean cleaner images, but fewer matches.</span></span></span>
+            <input id="cloudInput" type="number" min="0" max="100" value="{{ initial_state.default_cloud }}">
+          </label>
+
+          <label class="field">
+            <span class="field-label">Scene limit <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Limits how many scenes are loaded.</span></span></span>
+            <input id="limitInput" type="number" min="5" max="500" value="{{ initial_state.default_limit }}">
+          </label>
+
+          <label class="field">
+            <span class="field-label">Sequence <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Changes how strict the filtering is for the timelapse.</span></span></span>
+            <select id="sequenceModeSelect">
+              <option value="balanced" selected>Balanced</option>
+              <option value="strict">Strict alignment</option>
+              <option value="dense">Dense timeline</option>
+            </select>
+          </label>
+
+        </div>
+
+        <!-- Search action stays separate from the map-specific area selection controls. -->
+        <div class="action-row">
+          <button id="searchButton" type="button" class="button button-strong">Search</button>
+        </div>
+
+        <!-- Live search status and current result count. -->
+        <div class="status-strip">
+          <div>
+            <span class="status-label">Status</span>
+            <strong id="statusText">Choose an area to begin.</strong>
+          </div>
+          <div>
+            <span class="status-label">Results</span>
+            <strong id="resultCountText">0 scenes loaded</strong>
+          </div>
+        </div>
+      </section>
+
+      <!-- Map workspace for AOI selection and visual scene inspection. -->
+      <section class="panel map-panel">
+        <div class="panel-heading compact">
+          <div>
+            <p class="panel-kicker">Map</p>
+            <h2>Area</h2>
+          </div>
+          <p class="panel-copy">Draw a box or use what is already on screen.</p>
+        </div>
+        <!-- Area toolbar makes the selection workflow visible before the map itself. -->
+        <div class="area-toolbar">
+          <div class="area-toolbar-head">
+            <span class="status-label">Area Selection</span>
+            <div class="info-chip" tabindex="0" aria-label="How to use area selection">
+              <span>(i)</span>
+              <div class="info-popover" role="tooltip">
+                Click <strong>Draw area</strong>, then click two opposite corners on the map.
+                Or use <strong>Use map view</strong> to grab what you are looking at.
+                This usually works best at city scale, not huge regions.
+              </div>
+            </div>
+          </div>
+          <div class="area-toolbar-actions">
+            <button id="drawAreaButton" type="button" class="button button-primary">Draw area</button>
+            <button id="viewAreaButton" type="button" class="button">Use map view</button>
+            <button id="clearAreaButton" type="button" class="button">Clear</button>
+          </div>
+          <!-- The selected bbox is mirrored here so users can verify the current AOI. -->
+          <div class="area-output-wrap">
+            <span class="status-label">Selected area</span>
+            <output id="bboxOutput" class="area-output">No area selected yet.</output>
+          </div>
+        </div>
+        <!-- Basemap toggles and the Leaflet mount point. -->
+        <div class="map-toolbar" role="group" aria-label="Map style">
+          <button id="streetsLayerButton" type="button" class="map-toggle">Streets</button>
+          <button id="satelliteLayerButton" type="button" class="map-toggle active">Satellite</button>
+        </div>
+        <div id="map" class="map-frame" aria-label="Satellite search map"></div>
+      </section>
+
+      <!-- Timeline analytics summarizing the current result set. -->
+      <section class="panel analytics-panel">
+        <div class="panel-heading compact">
+          <div>
+            <p class="panel-kicker">Overview</p>
+            <h2>Timeline</h2>
+          </div>
+          <p class="panel-copy">See when the images were taken and how they spread over time.</p>
+        </div>
+
+        <div class="analytics-grid">
+          <div class="stats-grid" id="statsGrid"></div>
+          <div class="timeline-panel">
+            <div class="timeline-scale" id="timelineScale"></div>
+            <div class="timeline-track" id="timelineTrack" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lower workspace with scene cards on the left and the active preview on the right. -->
+      <section class="media-row">
+        <section class="panel results-panel">
+          <div class="panel-heading compact">
+          <div>
+            <p class="panel-kicker">Scenes</p>
+            <h2>Results</h2>
+          </div>
+          <p class="panel-copy">Pick a scene to see it on the map and in the preview.</p>
+        </div>
+          <div id="resultsList" class="results-list" aria-live="polite"></div>
+          <div id="resultsPager" class="results-pager" aria-live="polite"></div>
+        </section>
+
+        <!-- Preview/player panel for the currently selected scene and exports. -->
+        <section class="panel player-panel">
+          <div class="panel-heading compact">
+          <div>
+            <p class="panel-kicker">Preview</p>
+            <h2>Timelapse</h2>
+          </div>
+          <p class="panel-copy">Play the sequence or save the frames.</p>
+          </div>
+
+          <div class="player-stage">
+            <img id="playerImage" alt="Selected satellite frame preview">
+            <div id="playerPlaceholder" class="player-placeholder">
+              Search an area to load some frames.
+            </div>
+          </div>
+
+          <div class="player-meta">
+            <div>
+              <span class="status-label">Frame</span>
+              <strong id="playerTitle">No frame selected</strong>
+            </div>
+            <div>
+              <span class="status-label">Details</span>
+              <strong id="playerSubtitle">Awaiting overpass search</strong>
+            </div>
+          </div>
+
+          <!-- Selected file metadata plus direct source URLs. -->
+          <div class="file-panel">
+            <span class="status-label">Selected file</span>
+            <strong id="fileNameText">No file selected</strong>
+            <p id="fileUrlText" class="file-url">Run a search to inspect the selected frame.</p>
+            <div class="url-grid">
+              <article class="url-card">
+                <div class="url-card-head">
+                  <span class="status-label">STAC URL</span>
+                  <a id="stacUrlLink" class="mini-link" href="#" target="_blank" rel="noreferrer noopener" hidden>Open</a>
+                </div>
+                <code id="stacUrlCode" class="url-code">No STAC URL available.</code>
+              </article>
+              <article class="url-card">
+                <div class="url-card-head">
+                  <span class="status-label">Titiler URL</span>
+                </div>
+                <code id="titilerUrlCode" class="url-code">No TiTiler URL available.</code>
+              </article>
+            </div>
+          </div>
+
+          <!-- Playback controls and download actions. -->
+          <div class="player-controls">
+            <button id="playButton" type="button" class="button button-primary" disabled>Play</button>
+            <button id="exportButton" type="button" class="button" disabled>Download GIF</button>
+            <button id="downloadFramesButton" type="button" class="button" disabled>Download ZIP</button>
+            <label class="inline-field">
+              <span>Speed</span>
+              <input id="speedInput" type="range" min="1" max="6" value="2">
+            </label>
+            <label class="inline-field grow">
+              <span>Frame</span>
+              <input id="timelineInput" type="range" min="0" max="0" value="0" disabled>
+            </label>
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <!-- Initial configuration is injected by Flask so the frontend can bootstrap itself. -->
+  <script>
+    window.APP_CONFIG = {{ initial_state | tojson }};
+  </script>
+  <!-- Leaflet powers the interactive map; app.js handles all frontend behavior. -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
