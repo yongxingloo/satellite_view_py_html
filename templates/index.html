@@ -25,8 +25,8 @@
       <p class="eyebrow">Satellite Timelapse</p>
       <h1>satelliteview</h1>
       <p class="hero-copy">
-        Select an area, load matching satellite images, and preview the sequence as a timelapse.
-        This page enables you to easily track, visualise, and analyse environmental changes and global events
+        Pick an area, load satellite images, and play them back as a timelapse.
+        It is a simple way to look at how a place changes over time.
       </p>
     </section>
 
@@ -38,13 +38,13 @@
             <p class="panel-kicker">Search</p>
             <h2>Settings</h2>
           </div>
-          <p class="panel-copy">Choose a time range and filter the results.</p>
+          <p class="panel-copy">Set a time range and a few filters, then search.</p>
         </div>
 
         <!-- Main filter form. Each field is paired with a small inline help tooltip. -->
         <div class="form-grid">
           <label class="field">
-            <span class="field-label">Collection <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Choose the satellite source used for the search.</span></span></span>
+            <span class="field-label">Collection <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Pick which satellite data to search.</span></span></span>
             <select id="collectionSelect">
               <option value="sentinel-2-l2a" selected>Sentinel-2 L2A</option>
               <option value="landsat-c2-l2">Landsat</option>
@@ -53,27 +53,27 @@
           </label>
 
           <label class="field">
-            <span class="field-label">Start date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Set the beginning of the time range to search for scenes.</span></span></span>
+            <span class="field-label">Start date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">The first date to include in the search.</span></span></span>
             <input id="startDateInput" type="date" value="{{ initial_state.default_start_date }}">
           </label>
 
           <label class="field">
-            <span class="field-label">End date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Set the end of the time range to search for scenes.</span></span></span>
+            <span class="field-label">End date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">The last date to include in the search.</span></span></span>
             <input id="endDateInput" type="date" value="{{ initial_state.default_end_date }}">
           </label>
 
           <label class="field">
-            <span class="field-label">Cloud cover max (%) <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Lower values reduce cloudy scenes but may return fewer results.</span></span></span>
+            <span class="field-label">Cloud cover max (%) <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Lower values usually mean cleaner images, but fewer matches.</span></span></span>
             <input id="cloudInput" type="number" min="0" max="100" value="{{ initial_state.default_cloud }}">
           </label>
 
           <label class="field">
-            <span class="field-label">Scene limit <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Caps how many matching scenes are loaded into the timeline.</span></span></span>
+            <span class="field-label">Scene limit <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Limits how many scenes are loaded.</span></span></span>
             <input id="limitInput" type="number" min="5" max="500" value="{{ initial_state.default_limit }}">
           </label>
 
           <label class="field">
-            <span class="field-label">Sequence <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Controls how strictly the app filters scenes for the timelapse.</span></span></span>
+            <span class="field-label">Sequence <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Changes how strict the filtering is for the timelapse.</span></span></span>
             <select id="sequenceModeSelect">
               <option value="balanced" selected>Balanced</option>
               <option value="strict">Strict alignment</option>
@@ -108,7 +108,7 @@
             <p class="panel-kicker">Map</p>
             <h2>Area</h2>
           </div>
-          <p class="panel-copy">Draw a rectangle or use the current view.</p>
+          <p class="panel-copy">Draw a box or use what is already on screen.</p>
         </div>
         <!-- Area toolbar makes the selection workflow visible before the map itself. -->
         <div class="area-toolbar">
@@ -118,8 +118,8 @@
               <span>(i)</span>
               <div class="info-popover" role="tooltip">
                 Click <strong>Draw area</strong>, then click two opposite corners on the map.
-                You can also use <strong>Use map view</strong> to select the visible map extent.
-                Best results are usually at city scale rather than very large regions.
+                Or use <strong>Use map view</strong> to grab what you are looking at.
+                This usually works best at city scale, not huge regions.
               </div>
             </div>
           </div>
@@ -149,7 +149,7 @@
             <p class="panel-kicker">Overview</p>
             <h2>Timeline</h2>
           </div>
-          <p class="panel-copy">See when scenes were captured and how the current set is distributed over time.</p>
+          <p class="panel-copy">See when the images were taken and how they spread over time.</p>
         </div>
 
         <div class="analytics-grid">
@@ -165,29 +165,29 @@
       <section class="media-row">
         <section class="panel results-panel">
           <div class="panel-heading compact">
-            <div>
-              <p class="panel-kicker">Scenes</p>
-              <h2>Results</h2>
-            </div>
-            <p class="panel-copy">Pick a scene to inspect it on the map and in the preview.</p>
+          <div>
+            <p class="panel-kicker">Scenes</p>
+            <h2>Results</h2>
           </div>
+          <p class="panel-copy">Pick a scene to see it on the map and in the preview.</p>
+        </div>
           <div id="resultsList" class="results-list" aria-live="polite"></div>
         </section>
 
         <!-- Preview/player panel for the currently selected scene and exports. -->
         <section class="panel player-panel">
           <div class="panel-heading compact">
-            <div>
-              <p class="panel-kicker">Preview</p>
-              <h2>Timelapse</h2>
-            </div>
-            <p class="panel-copy">Play the sequence and download the frames.</p>
+          <div>
+            <p class="panel-kicker">Preview</p>
+            <h2>Timelapse</h2>
+          </div>
+          <p class="panel-copy">Play the sequence or save the frames.</p>
           </div>
 
           <div class="player-stage">
             <img id="playerImage" alt="Selected satellite frame preview">
             <div id="playerPlaceholder" class="player-placeholder">
-              Search an area to populate the timelapse frames.
+              Search an area to load some frames.
             </div>
           </div>
 
@@ -206,7 +206,7 @@
           <div class="file-panel">
             <span class="status-label">Selected file</span>
             <strong id="fileNameText">No file selected</strong>
-            <p id="fileUrlText" class="file-url">Run a search to inspect the selected frame source.</p>
+            <p id="fileUrlText" class="file-url">Run a search to inspect the selected frame.</p>
             <div class="url-grid">
               <article class="url-card">
                 <div class="url-card-head">

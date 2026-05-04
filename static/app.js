@@ -368,9 +368,9 @@ function renderPlayer() {
     playerImage.removeAttribute("src");
     playerPlaceholder.hidden = false;
     playerTitle.textContent = "No frame selected";
-    playerSubtitle.textContent = "Awaiting overpass search";
+    playerSubtitle.textContent = "Nothing loaded yet";
     fileNameText.textContent = "No file selected";
-    fileUrlText.textContent = "Run a search to inspect the selected frame source.";
+    fileUrlText.textContent = "Run a search to inspect the selected frame.";
     stacUrlCode.textContent = "No STAC URL available.";
     titilerUrlCode.textContent = "No TiTiler URL available.";
     stacUrlLink.hidden = true;
@@ -414,7 +414,7 @@ function renderResults() {
   resultsList.innerHTML = "";
 
   if (!state.items.length) {
-    resultsList.innerHTML = '<div class="empty-state">No scenes loaded yet.</div>';
+    resultsList.innerHTML = '<div class="empty-state">No scenes yet.</div>';
     renderTimeline();
     renderPlayer();
     return;
@@ -512,7 +512,7 @@ async function advancePlayback() {
     }
   }
 
-  setStatus("Playback stopped because no additional preview files could be loaded.");
+  setStatus("Playback stopped because the next frames would not load.");
   stopPlayback();
 }
 
@@ -554,12 +554,12 @@ async function postJson(url, payload) {
 async function searchScenes() {
   // Send the current filters and AOI to the backend search endpoint.
   if (!state.bbox) {
-    setStatus("Choose an area before searching.");
+    setStatus("Pick an area first.");
     return;
   }
 
   stopPlayback();
-  setStatus("Searching scenes...");
+  setStatus("Searching...");
   searchButton.disabled = true;
 
   try {
@@ -582,7 +582,7 @@ async function searchScenes() {
     if (state.items.length) {
       setStatus(`Loaded ${state.items.length} scene${state.items.length === 1 ? "" : "s"}.`);
     } else {
-      setStatus("No matching scenes were returned for that search.");
+      setStatus("No scenes matched that search.");
     }
   } catch (error) {
     state.items = [];
@@ -610,9 +610,9 @@ async function downloadExport(url, payload, fileName) {
 
 async function exportAnimation() {
   try {
-    setStatus("Rendering animation...");
+    setStatus("Making GIF...");
     await downloadExport("/api/export/animation", { scenes: state.items, fps: Number(speedInput.value) }, "satellite_timelapse.gif");
-    setStatus("Downloaded animated GIF.");
+    setStatus("GIF downloaded.");
   } catch (error) {
     setStatus(error.message);
   }
@@ -620,9 +620,9 @@ async function exportAnimation() {
 
 async function downloadFrames() {
   try {
-    setStatus("Preparing frame download...");
+    setStatus("Preparing ZIP...");
     await downloadExport("/api/export/frames", { scenes: state.items }, "satellite_frames.zip");
-    setStatus("Downloaded ZIP.");
+    setStatus("ZIP downloaded.");
   } catch (error) {
     setStatus(error.message);
   }
@@ -632,7 +632,7 @@ async function downloadFrames() {
 drawAreaButton.addEventListener("click", toggleDrawing);
 viewAreaButton.addEventListener("click", () => {
   setBBox(normalizeBounds(map.getBounds()), false);
-  setStatus("Using the current map view as the search area.");
+  setStatus("Using the current map view.");
 });
 clearAreaButton.addEventListener("click", () => {
   stopPlayback();
@@ -645,7 +645,7 @@ clearAreaButton.addEventListener("click", () => {
   renderStats({ scene_count: 0, range_label: "--", average_revisit_days: null, average_cloud_cover: null });
   renderResults();
   setResultCount(0);
-  setStatus("Area and search results cleared.");
+  setStatus("Cleared.");
 });
 searchButton.addEventListener("click", searchScenes);
 streetsLayerButton.addEventListener("click", () => setActiveMapLayer("streets"));
@@ -685,7 +685,7 @@ map.on("click", (event) => {
   const bounds = L.latLngBounds(state.anchorLatLng, event.latlng);
   setBBox(normalizeBounds(bounds), true);
   stopDrawing();
-  setStatus("Area selected. You can search now.");
+  setStatus("Area selected.");
 });
 
 map.on("mousemove", (event) => {
@@ -708,8 +708,8 @@ playerImage.addEventListener("error", () => {
   playerImage.removeAttribute("src");
   playerPlaceholder.hidden = false;
   fileUrlText.textContent = previewUrl
-    ? "The preview file failed to load for this frame."
-    : "This scene does not expose a direct preview file.";
+    ? "That preview would not load."
+    : "This scene does not have a direct preview file.";
   if (state.playing) {
     advancePlayback().catch((error) => {
       setStatus(error.message);
@@ -724,5 +724,5 @@ renderResults();
 setPlayerButtonState();
 if (Array.isArray(config.default_bbox) && config.default_bbox.length === 4) {
   setBBox(config.default_bbox, true);
-  setStatus("Default area loaded. Search to begin.");
+  setStatus("Area ready.");
 }
