@@ -23,6 +23,7 @@ const downloadFramesButton = document.querySelector("#downloadFramesButton");
 const speedInput = document.querySelector("#speedInput");
 const timelineInput = document.querySelector("#timelineInput");
 const resultsList = document.querySelector("#resultsList");
+const resultsPager = document.querySelector("#resultsPager");
 const statsGrid = document.querySelector("#statsGrid");
 const timelineScale = document.querySelector("#timelineScale");
 const timelineTrack = document.querySelector("#timelineTrack");
@@ -72,6 +73,8 @@ const state = {
   items: [],
   resultCards: [],
   timelineDots: [],
+  resultsPage: 0,
+  pageSize: 7,
   selectedIndex: -1,
   playing: false,
   playTimer: null,
@@ -335,10 +338,63 @@ function renderTimeline() {
   });
 }
 
+function getResultPageCount() {
+  return Math.max(1, Math.ceil(state.items.length / state.pageSize));
+}
+
+function getResultPageForIndex(index) {
+  return Math.max(0, Math.floor(index / state.pageSize));
+}
+
+function clampResultsPage() {
+  state.resultsPage = Math.max(0, Math.min(state.resultsPage, getResultPageCount() - 1));
+}
+
+function renderResultsPager() {
+  resultsPager.innerHTML = "";
+
+  if (!state.items.length) {
+    resultsPager.hidden = true;
+    return;
+  }
+
+  const pageCount = getResultPageCount();
+  resultsPager.hidden = pageCount <= 1;
+  if (pageCount <= 1) {
+    return;
+  }
+
+  const previousButton = document.createElement("button");
+  previousButton.type = "button";
+  previousButton.className = "button";
+  previousButton.textContent = "Previous";
+  previousButton.disabled = state.resultsPage === 0;
+  previousButton.addEventListener("click", () => {
+    state.resultsPage -= 1;
+    renderResultsPage();
+  });
+
+  const pageLabel = document.createElement("span");
+  pageLabel.className = "results-page-label";
+  pageLabel.textContent = `Page ${state.resultsPage + 1} of ${pageCount}`;
+
+  const nextButton = document.createElement("button");
+  nextButton.type = "button";
+  nextButton.className = "button";
+  nextButton.textContent = "Next";
+  nextButton.disabled = state.resultsPage >= pageCount - 1;
+  nextButton.addEventListener("click", () => {
+    state.resultsPage += 1;
+    renderResultsPage();
+  });
+
+  resultsPager.append(previousButton, pageLabel, nextButton);
+}
+
 function updateSelectionStyles() {
   // Keep the active result card and active timeline dot visually in sync.
-  state.resultCards.forEach((card, index) => {
-    card.classList.toggle("active", index === state.selectedIndex);
+  state.resultCards.forEach((card) => {
+    card.classList.toggle("active", Number(card.dataset.sceneIndex) === state.selectedIndex);
   });
   state.timelineDots.forEach((dot, index) => {
     dot.classList.toggle("active", index === state.selectedIndex);
@@ -412,9 +468,11 @@ function renderResults() {
   footprintLayer.clearLayers();
   highlightedLayer.clearLayers();
   resultsList.innerHTML = "";
+  resultsPager.innerHTML = "";
 
   if (!state.items.length) {
     resultsList.innerHTML = '<div class="empty-state">No scenes yet.</div>';
+    resultsPager.hidden = true;
     renderTimeline();
     renderPlayer();
     return;
@@ -424,6 +482,34 @@ function renderResults() {
     if (scene.geometry) {
       footprintLayer.addData(scene.geometry);
     }
+  });
+
+  renderTimeline();
+  clampResultsPage();
+  if (state.selectedIndex >= 0) {
+    state.resultsPage = getResultPageForIndex(state.selectedIndex);
+  }
+  renderResultsPage();
+  updateHighlightedScene(false);
+  renderPlayer();
+}
+
+function renderResultsPage() {
+  state.resultCards = [];
+  resultsList.innerHTML = "";
+
+  if (!state.items.length) {
+    resultsList.innerHTML = '<div class="empty-state">No scenes yet.</div>';
+    resultsPager.hidden = true;
+    return;
+  }
+
+  clampResultsPage();
+  const startIndex = state.resultsPage * state.pageSize;
+  const endIndex = Math.min(startIndex + state.pageSize, state.items.length);
+
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const scene = state.items[index];
     const previewUrl = resolveScenePreviewUrl(scene);
     const thumbnailUrl = scene.fallback_frame_url || previewUrl;
     const thumbnailMarkup = thumbnailUrl
@@ -431,6 +517,7 @@ function renderResults() {
       : `<div class="result-thumb result-thumb-empty">No preview</div>`;
     const card = document.createElement("article");
     card.className = "result-card";
+    card.dataset.sceneIndex = String(index);
     card.innerHTML = `
       ${thumbnailMarkup}
       <div class="result-content">
@@ -443,18 +530,22 @@ function renderResults() {
     card.addEventListener("click", () => selectScene(index, true));
     resultsList.append(card);
     state.resultCards.push(card);
-  });
+  }
 
-  renderTimeline();
-  updateHighlightedScene(false);
+  renderResultsPager();
   updateSelectionStyles();
-  renderPlayer();
 }
 
 function selectScene(index, focusMap) {
   state.selectedIndex = index;
+  const nextPage = getResultPageForIndex(index);
+  if (nextPage !== state.resultsPage) {
+    state.resultsPage = nextPage;
+    renderResultsPage();
+  } else {
+    updateSelectionStyles();
+  }
   updateHighlightedScene(focusMap);
-  updateSelectionStyles();
   renderPlayer();
 }
 
@@ -575,6 +666,7 @@ async function searchScenes() {
     const data = await response.json();
     state.previewStatus = new Map();
     state.items = data.scenes;
+    state.resultsPage = 0;
     state.selectedIndex = state.items.length ? 0 : -1;
     setResultCount(state.items.length);
     renderStats(data.stats);
@@ -586,6 +678,7 @@ async function searchScenes() {
     }
   } catch (error) {
     state.items = [];
+    state.resultsPage = 0;
     state.selectedIndex = -1;
     renderStats({ scene_count: 0, range_label: "--", average_revisit_days: null, average_cloud_cover: null });
     renderResults();
@@ -638,6 +731,7 @@ clearAreaButton.addEventListener("click", () => {
   stopPlayback();
   stopDrawing();
   state.items = [];
+  state.resultsPage = 0;
   state.selectedIndex = -1;
   setBBox(null, false);
   footprintLayer.clearLayers();
