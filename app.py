@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -9,6 +10,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from flask import Flask, Response, jsonify, render_template, request, send_file
 from PIL import Image, ImageDraw
 import requests
+from requests.adapters import HTTPAdapter
 
 
 EARTH_SEARCH_API = "https://earth-search.aws.element84.com/v1/search"
@@ -16,7 +18,8 @@ PLANETARY_COMPUTER_STAC_API = "https://planetarycomputer.microsoft.com/api/stac/
 PLANETARY_COMPUTER_DATA_API = "https://planetarycomputer.microsoft.com/api/data/v1/item"
 TITILER_STAC_API = "https://titiler.xyz/stac/bbox"
 
-DEFAULT_CENTER = [47.3769, 8.5417]
+DEFAULT_BBOX = [-73.9187, 22.6590, -73.8574, 22.7113]
+DEFAULT_CENTER = [22.68515, -73.88805]
 DEFAULT_ZOOM = 12
 DEFAULT_COLLECTION = "sentinel-2-l2a"
 SUPPORTED_COLLECTIONS = {"sentinel-2-l2a", "landsat-c2-l2", "merged"}
@@ -24,6 +27,9 @@ SUPPORTED_SEQUENCE_MODES = {"balanced", "strict", "dense"}
 
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
+EXPORT_SESSION = requests.Session()
+EXPORT_SESSION.mount("https://", HTTPAdapter(pool_connections=16, pool_maxsize=16))
+EXPORT_SESSION.mount("http://", HTTPAdapter(pool_connections=16, pool_maxsize=16))
 
 
 def to_date_input(value: date) -> str:
@@ -35,11 +41,12 @@ def build_initial_state() -> dict[str, Any]:
     return {
         "default_center": DEFAULT_CENTER,
         "default_zoom": DEFAULT_ZOOM,
+        "default_bbox": DEFAULT_BBOX,
         "default_collection": DEFAULT_COLLECTION,
         "default_start_date": to_date_input(today - timedelta(days=365)),
         "default_end_date": to_date_input(today),
         "default_cloud": 25,
-        "default_limit": 120,
+        "default_limit": 20,
         "default_sequence_mode": "balanced",
     }
 
@@ -388,7 +395,7 @@ def parse_search_request(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def download_bytes(url: str) -> tuple[bytes, str]:
-    response = requests.get(url, timeout=120)
+    response = EXPORT_SESSION.get(url, timeout=120)
     response.raise_for_status()
     content_type = response.headers.get("content-type", "")
     extension = ".png"
@@ -399,10 +406,18 @@ def download_bytes(url: str) -> tuple[bytes, str]:
     return response.content, extension
 
 
+def download_many(urls: list[str]) -> list[tuple[bytes, str]]:
+    if not urls:
+        return []
+
+    max_workers = min(8, max(2, len(urls)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        return list(executor.map(download_bytes, urls))
+
+
 def fetch_animation_frames(frame_urls: list[str]) -> list[Image.Image]:
     frames: list[Image.Image] = []
-    for url in frame_urls:
-        image_bytes, _ = download_bytes(url)
+    for image_bytes, _ in download_many(frame_urls):
         with Image.open(BytesIO(image_bytes)) as image:
             frames.append(image.convert("RGB"))
     return frames
@@ -467,10 +482,11 @@ def api_export_frames() -> Response:
     if not frame_scenes:
         return jsonify({"error": "No scenes with downloadable frames were provided."}), 400
 
+    downloaded_frames = download_many([scene["frame_url"] for scene in frame_scenes])
     buffer = BytesIO()
     with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
-        for index, scene in enumerate(frame_scenes, start=1):
-            image_bytes, extension = download_bytes(scene["frame_url"])
+        for index, (scene, downloaded_frame) in enumerate(zip(frame_scenes, downloaded_frames, strict=True), start=1):
+            image_bytes, extension = downloaded_frame
             scene_date = (scene.get("datetime") or "unknown-date")[:10]
             archive.writestr(f"{index:03d}_{scene_date}_{scene['id']}{extension}", image_bytes)
     buffer.seek(0)

@@ -30,7 +30,9 @@ const playerTitle = document.querySelector("#playerTitle");
 const playerSubtitle = document.querySelector("#playerSubtitle");
 const fileNameText = document.querySelector("#fileNameText");
 const fileUrlText = document.querySelector("#fileUrlText");
-const downloadLink = document.querySelector("#downloadLink");
+const stacUrlLink = document.querySelector("#stacUrlLink");
+const stacUrlCode = document.querySelector("#stacUrlCode");
+const titilerUrlCode = document.querySelector("#titilerUrlCode");
 
 const map = L.map("map", { zoomControl: true }).setView(config.default_center, config.default_zoom);
 L.control.scale({ imperial: false, metric: true }).addTo(map);
@@ -50,10 +52,10 @@ satelliteLayer.addTo(map);
 
 const aoiLayer = L.featureGroup().addTo(map);
 const footprintLayer = L.geoJSON(null, {
-  style: () => ({ color: "#8f4d26", weight: 1.4, fillColor: "#8f4d26", fillOpacity: 0.12 })
+  style: () => ({ color: "#8f4d26", weight: 1.2, fillColor: "#8f4d26", fillOpacity: 0.04, opacity: 0.65 })
 }).addTo(map);
 const highlightedLayer = L.geoJSON(null, {
-  style: () => ({ color: "#173b63", weight: 2, fillColor: "#173b63", fillOpacity: 0.12 })
+  style: () => ({ color: "#173b63", weight: 1.8, fillColor: "#173b63", fillOpacity: 0.06, opacity: 0.75 })
 }).addTo(map);
 
 const state = {
@@ -207,6 +209,13 @@ function getSceneFileName(scene) {
   return previewUrl.split("/").pop().split("?")[0] || "preview-file";
 }
 
+function formatCloudValue(value) {
+  if (value == null || Number.isNaN(Number(value))) {
+    return "--";
+  }
+  return Number(value).toFixed(2);
+}
+
 function markPreviewStatus(url, status) {
   if (url) {
     state.previewStatus.set(url, status);
@@ -349,19 +358,28 @@ function renderPlayer() {
     playerTitle.textContent = "No frame selected";
     playerSubtitle.textContent = "Awaiting overpass search";
     fileNameText.textContent = "No file selected";
-    fileUrlText.textContent = "Run a search to inspect the individual preview file for a frame.";
-    downloadLink.hidden = true;
+    fileUrlText.textContent = "Run a search to inspect the selected frame source.";
+    stacUrlCode.textContent = "No STAC URL available.";
+    titilerUrlCode.textContent = "No TiTiler URL available.";
+    stacUrlLink.hidden = true;
     return;
   }
 
   const selected = state.items[state.selectedIndex];
   const frameUrl = resolveScenePreviewUrl(selected);
+  const stacUrl = selected.browser_url || "";
   const fileName = getSceneFileName(selected);
   playerTitle.textContent = `${state.selectedIndex + 1} / ${state.items.length}  ${formatSceneDate(selected.datetime)}`;
-  playerSubtitle.textContent = `${selected.collection} - ${selected.id} - coverage ${(selected.coverage_score * 100).toFixed(0)}%`;
+  playerSubtitle.textContent = `${selected.collection} - ${selected.id} - cloud ${formatCloudValue(selected.cloud_cover)}%`;
   timelineInput.value = String(state.selectedIndex);
   fileNameText.textContent = fileName;
-  fileUrlText.textContent = frameUrl || "This scene does not expose a direct preview file.";
+  fileUrlText.textContent = `Scene ${selected.id} from ${selected.collection}`;
+  stacUrlCode.textContent = stacUrl || "No STAC URL available.";
+  titilerUrlCode.textContent = frameUrl || "No TiTiler URL available.";
+  stacUrlLink.hidden = !stacUrl;
+  if (stacUrl) {
+    stacUrlLink.href = stacUrl;
+  }
 
   if (frameUrl) {
     if (playerImage.src !== frameUrl) {
@@ -369,13 +387,10 @@ function renderPlayer() {
     }
     playerImage.style.display = "block";
     playerPlaceholder.hidden = true;
-    downloadLink.href = frameUrl;
-    downloadLink.hidden = false;
   } else {
     playerImage.style.display = "none";
     playerImage.removeAttribute("src");
     playerPlaceholder.hidden = false;
-    downloadLink.hidden = true;
   }
 }
 
@@ -408,7 +423,7 @@ function renderResults() {
         <h3>${formatSceneDate(scene.datetime)}</h3>
         <p>${scene.collection} - ${scene.id}</p>
         <p>${getSceneFileName(scene)}</p>
-        <p>Coverage ${(scene.coverage_score * 100).toFixed(0)}% - Cloud ${scene.cloud_cover == null ? "--" : `${scene.cloud_cover}%`}</p>
+        <p>Coverage ${(scene.coverage_score * 100).toFixed(0)}% - Cloud ${formatCloudValue(scene.cloud_cover)}%</p>
       </div>
     `;
     card.addEventListener("click", () => selectScene(index, true));
@@ -528,7 +543,7 @@ async function searchScenes() {
   }
 
   stopPlayback();
-  setStatus("Python backend is searching remote catalogs...");
+  setStatus("Searching scenes...");
   searchButton.disabled = true;
 
   try {
@@ -549,7 +564,7 @@ async function searchScenes() {
     renderStats(data.stats);
     renderResults();
     if (state.items.length) {
-      setStatus(`Loaded ${state.items.length} scene${state.items.length === 1 ? "" : "s"} from the Python backend.`);
+      setStatus(`Loaded ${state.items.length} scene${state.items.length === 1 ? "" : "s"}.`);
     } else {
       setStatus("No matching scenes were returned for that search.");
     }
@@ -578,9 +593,9 @@ async function downloadExport(url, payload, fileName) {
 
 async function exportAnimation() {
   try {
-    setStatus("Python backend is rendering the animation...");
+    setStatus("Rendering animation...");
     await downloadExport("/api/export/animation", { scenes: state.items, fps: Number(speedInput.value) }, "satellite_timelapse.gif");
-    setStatus("Downloaded animated GIF generated by the backend.");
+    setStatus("Downloaded animated GIF.");
   } catch (error) {
     setStatus(error.message);
   }
@@ -588,9 +603,9 @@ async function exportAnimation() {
 
 async function downloadFrames() {
   try {
-    setStatus("Python backend is packaging frame images...");
+    setStatus("Preparing frame download...");
     await downloadExport("/api/export/frames", { scenes: state.items }, "satellite_frames.zip");
-    setStatus("Downloaded ZIP generated by the backend.");
+    setStatus("Downloaded ZIP.");
   } catch (error) {
     setStatus(error.message);
   }
@@ -673,7 +688,7 @@ playerImage.addEventListener("error", () => {
   playerImage.removeAttribute("src");
   playerPlaceholder.hidden = false;
   fileUrlText.textContent = previewUrl
-    ? `This preview file failed to load: ${previewUrl}`
+    ? "The preview file failed to load for this frame."
     : "This scene does not expose a direct preview file.";
   if (state.playing) {
     advancePlayback().catch((error) => {
@@ -686,3 +701,7 @@ playerImage.addEventListener("error", () => {
 renderStats({ scene_count: 0, range_label: "--", average_revisit_days: null, average_cloud_cover: null });
 renderResults();
 setPlayerButtonState();
+if (Array.isArray(config.default_bbox) && config.default_bbox.length === 4) {
+  setBBox(config.default_bbox, true);
+  setStatus("Default area loaded. Search to begin.");
+}

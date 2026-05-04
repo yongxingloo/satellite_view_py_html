@@ -18,10 +18,11 @@
 <body>
   <main class="page-shell">
     <section class="hero-panel">
-      <p class="eyebrow">Python-first satellite explorer</p>
-      <h1>satellite_view_py_html</h1>
+      <p class="eyebrow">Satellite Timelapse</p>
+      <h1>satelliteview</h1>
       <p class="hero-copy">
-        Draw an area, let the Python backend search remote satellite catalogs, and browse the resulting timelapse in a lightweight HTML interface.
+        Select an area, load matching satellite images, and preview the sequence as a timelapse.
+        This page enables you to easily track, visualise, and analyse environmental changes and global events
       </p>
     </section>
 
@@ -32,12 +33,12 @@
             <p class="panel-kicker">Search</p>
             <h2>Settings</h2>
           </div>
-          <p class="panel-copy">The browser sends only your AOI and filters. Python handles search, filtering, and export.</p>
+          <p class="panel-copy">Choose a time range and filter the results.</p>
         </div>
 
         <div class="form-grid">
           <label class="field">
-            <span>Collection</span>
+            <span class="field-label">Collection <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Choose the satellite source used for the search.</span></span></span>
             <select id="collectionSelect">
               <option value="sentinel-2-l2a" selected>Sentinel-2 L2A</option>
               <option value="landsat-c2-l2">Landsat</option>
@@ -46,27 +47,27 @@
           </label>
 
           <label class="field">
-            <span>Start date</span>
+            <span class="field-label">Start date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Set the beginning of the time range to search for scenes.</span></span></span>
             <input id="startDateInput" type="date" value="{{ initial_state.default_start_date }}">
           </label>
 
           <label class="field">
-            <span>End date</span>
+            <span class="field-label">End date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Set the end of the time range to search for scenes.</span></span></span>
             <input id="endDateInput" type="date" value="{{ initial_state.default_end_date }}">
           </label>
 
           <label class="field">
-            <span>Cloud cover max (%)</span>
+            <span class="field-label">Cloud cover max (%) <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Lower values reduce cloudy scenes but may return fewer results.</span></span></span>
             <input id="cloudInput" type="number" min="0" max="100" value="{{ initial_state.default_cloud }}">
           </label>
 
           <label class="field">
-            <span>Scene limit</span>
+            <span class="field-label">Scene limit <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Caps how many matching scenes are loaded into the timeline.</span></span></span>
             <input id="limitInput" type="number" min="5" max="500" value="{{ initial_state.default_limit }}">
           </label>
 
           <label class="field">
-            <span>Sequence</span>
+            <span class="field-label">Sequence <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Controls how strictly the app filters scenes for the timelapse.</span></span></span>
             <select id="sequenceModeSelect">
               <option value="balanced" selected>Balanced</option>
               <option value="strict">Strict alignment</option>
@@ -74,16 +75,9 @@
             </select>
           </label>
 
-          <label class="field field-wide">
-            <span>Area</span>
-            <output id="bboxOutput">No area selected yet.</output>
-          </label>
         </div>
 
         <div class="action-row">
-          <button id="drawAreaButton" type="button" class="button button-primary">Draw area</button>
-          <button id="viewAreaButton" type="button" class="button">Use map view</button>
-          <button id="clearAreaButton" type="button" class="button">Clear</button>
           <button id="searchButton" type="button" class="button button-strong">Search</button>
         </div>
 
@@ -105,7 +99,29 @@
             <p class="panel-kicker">Map</p>
             <h2>Area</h2>
           </div>
-          <p class="panel-copy">Leaflet only handles drawing and selection here.</p>
+          <p class="panel-copy">Draw a rectangle or use the current view.</p>
+        </div>
+        <div class="area-toolbar">
+          <div class="area-toolbar-head">
+            <span class="status-label">Area Selection</span>
+            <div class="info-chip" tabindex="0" aria-label="How to use area selection">
+              <span>(i)</span>
+              <div class="info-popover" role="tooltip">
+                Click <strong>Draw area</strong>, then click two opposite corners on the map.
+                You can also use <strong>Use map view</strong> to select the visible map extent.
+                Best results are usually at city scale rather than very large regions.
+              </div>
+            </div>
+          </div>
+          <div class="area-toolbar-actions">
+            <button id="drawAreaButton" type="button" class="button button-primary">Draw area</button>
+            <button id="viewAreaButton" type="button" class="button">Use map view</button>
+            <button id="clearAreaButton" type="button" class="button">Clear</button>
+          </div>
+          <div class="area-output-wrap">
+            <span class="status-label">Selected area</span>
+            <output id="bboxOutput" class="area-output">No area selected yet.</output>
+          </div>
         </div>
         <div class="map-toolbar" role="group" aria-label="Map style">
           <button id="streetsLayerButton" type="button" class="map-toggle">Streets</button>
@@ -120,7 +136,7 @@
             <p class="panel-kicker">Overview</p>
             <h2>Timeline</h2>
           </div>
-          <p class="panel-copy">Stats are calculated server-side and returned with the scene list.</p>
+          <p class="panel-copy">See when scenes were captured and how the current set is distributed over time.</p>
         </div>
 
         <div class="analytics-grid">
@@ -150,7 +166,7 @@
               <p class="panel-kicker">Preview</p>
               <h2>Timelapse</h2>
             </div>
-            <p class="panel-copy">Playback stays in the browser, but exports are generated by Python.</p>
+            <p class="panel-copy">Play the sequence and download the frames.</p>
           </div>
 
           <div class="player-stage">
@@ -174,7 +190,22 @@
           <div class="file-panel">
             <span class="status-label">Selected file</span>
             <strong id="fileNameText">No file selected</strong>
-            <p id="fileUrlText" class="file-url">Run a search to inspect the individual preview file for a frame.</p>
+            <p id="fileUrlText" class="file-url">Run a search to inspect the selected frame source.</p>
+            <div class="url-grid">
+              <article class="url-card">
+                <div class="url-card-head">
+                  <span class="status-label">STAC URL</span>
+                  <a id="stacUrlLink" class="mini-link" href="#" target="_blank" rel="noreferrer noopener" hidden>Open</a>
+                </div>
+                <code id="stacUrlCode" class="url-code">No STAC URL available.</code>
+              </article>
+              <article class="url-card">
+                <div class="url-card-head">
+                  <span class="status-label">Titiler URL</span>
+                </div>
+                <code id="titilerUrlCode" class="url-code">No TiTiler URL available.</code>
+              </article>
+            </div>
           </div>
 
           <div class="player-controls">
@@ -190,8 +221,6 @@
               <input id="timelineInput" type="range" min="0" max="0" value="0" disabled>
             </label>
           </div>
-
-          <a id="downloadLink" class="download-link" href="#" target="_blank" rel="noreferrer noopener" hidden>Open selected file</a>
         </section>
       </section>
     </section>
