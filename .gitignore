@@ -1,2 +1,4 @@
+# Python bytecode cache directories.
 __pycache__/
+# Compiled Python files.
 *.py[cod]

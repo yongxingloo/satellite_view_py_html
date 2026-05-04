@@ -1,9 +1,12 @@
 <!DOCTYPE html>
+<!-- Main HTML shell for the satellite timelapse application. -->
 <html lang="en">
 <head>
+  <!-- Basic document metadata and responsive scaling. -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Satellite Timelapse</title>
+  <!-- Typography and map stylesheet dependencies. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,6 +19,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
+  <!-- Page shell containing the hero, controls, map, analytics, results, and preview. -->
   <main class="page-shell">
     <section class="hero-panel">
       <p class="eyebrow">Satellite Timelapse</p>
@@ -27,6 +31,7 @@
     </section>
 
     <section class="workspace-grid">
+      <!-- Search/filter controls that drive the backend search request. -->
       <section class="panel controls-panel">
         <div class="panel-heading">
           <div>
@@ -36,6 +41,7 @@
           <p class="panel-copy">Choose a time range and filter the results.</p>
         </div>
 
+        <!-- Main filter form. Each field is paired with a small inline help tooltip. -->
         <div class="form-grid">
           <label class="field">
             <span class="field-label">Collection <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Choose the satellite source used for the search.</span></span></span>
@@ -77,10 +83,12 @@
 
         </div>
 
+        <!-- Search action stays separate from the map-specific area selection controls. -->
         <div class="action-row">
           <button id="searchButton" type="button" class="button button-strong">Search</button>
         </div>
 
+        <!-- Live search status and current result count. -->
         <div class="status-strip">
           <div>
             <span class="status-label">Status</span>
@@ -93,6 +101,7 @@
         </div>
       </section>
 
+      <!-- Map workspace for AOI selection and visual scene inspection. -->
       <section class="panel map-panel">
         <div class="panel-heading compact">
           <div>
@@ -101,6 +110,7 @@
           </div>
           <p class="panel-copy">Draw a rectangle or use the current view.</p>
         </div>
+        <!-- Area toolbar makes the selection workflow visible before the map itself. -->
         <div class="area-toolbar">
           <div class="area-toolbar-head">
             <span class="status-label">Area Selection</span>
@@ -118,11 +128,13 @@
             <button id="viewAreaButton" type="button" class="button">Use map view</button>
             <button id="clearAreaButton" type="button" class="button">Clear</button>
           </div>
+          <!-- The selected bbox is mirrored here so users can verify the current AOI. -->
           <div class="area-output-wrap">
             <span class="status-label">Selected area</span>
             <output id="bboxOutput" class="area-output">No area selected yet.</output>
           </div>
         </div>
+        <!-- Basemap toggles and the Leaflet mount point. -->
         <div class="map-toolbar" role="group" aria-label="Map style">
           <button id="streetsLayerButton" type="button" class="map-toggle">Streets</button>
           <button id="satelliteLayerButton" type="button" class="map-toggle active">Satellite</button>
@@ -130,6 +142,7 @@
         <div id="map" class="map-frame" aria-label="Satellite search map"></div>
       </section>
 
+      <!-- Timeline analytics summarizing the current result set. -->
       <section class="panel analytics-panel">
         <div class="panel-heading compact">
           <div>
@@ -148,6 +161,7 @@
         </div>
       </section>
 
+      <!-- Lower workspace with scene cards on the left and the active preview on the right. -->
       <section class="media-row">
         <section class="panel results-panel">
           <div class="panel-heading compact">
@@ -160,6 +174,7 @@
           <div id="resultsList" class="results-list" aria-live="polite"></div>
         </section>
 
+        <!-- Preview/player panel for the currently selected scene and exports. -->
         <section class="panel player-panel">
           <div class="panel-heading compact">
             <div>
@@ -187,6 +202,7 @@
             </div>
           </div>
 
+          <!-- Selected file metadata plus direct source URLs. -->
           <div class="file-panel">
             <span class="status-label">Selected file</span>
             <strong id="fileNameText">No file selected</strong>
@@ -208,6 +224,7 @@
             </div>
           </div>
 
+          <!-- Playback controls and download actions. -->
           <div class="player-controls">
             <button id="playButton" type="button" class="button button-primary" disabled>Play</button>
             <button id="exportButton" type="button" class="button" disabled>Download GIF</button>
@@ -226,9 +243,11 @@
     </section>
   </main>
 
+  <!-- Initial configuration is injected by Flask so the frontend can bootstrap itself. -->
   <script>
     window.APP_CONFIG = {{ initial_state | tojson }};
   </script>
+  <!-- Leaflet powers the interactive map; app.js handles all frontend behavior. -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="

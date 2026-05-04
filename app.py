@@ -1,3 +1,11 @@
+"""Flask application for searching and previewing satellite timelapse scenes.
+
+This module contains three main responsibilities:
+1. Serve the main HTML page and its initial UI state.
+2. Search STAC APIs, normalize returned items, and prepare preview URLs.
+3. Export the currently selected sequence as a ZIP of frames or an animated GIF.
+"""
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -33,10 +41,23 @@ EXPORT_SESSION.mount("http://", HTTPAdapter(pool_connections=16, pool_maxsize=16
 
 
 def to_date_input(value: date) -> str:
+    """Format a Python date for use in an HTML ``<input type="date">``.
+
+    Args:
+        value: Date object to format.
+
+    Returns:
+        The date formatted as ``YYYY-MM-DD``.
+    """
     return value.isoformat()
 
 
 def build_initial_state() -> dict[str, Any]:
+    """Build the default UI state injected into the first page render.
+
+    Returns:
+        A dictionary containing default map, form, and AOI settings.
+    """
     today = date.today()
     return {
         "default_center": DEFAULT_CENTER,
@@ -52,6 +73,17 @@ def build_initial_state() -> dict[str, Any]:
 
 
 def clamp_number(value: Any, minimum: float, maximum: float, fallback: float) -> float:
+    """Convert a value to a bounded float.
+
+    Args:
+        value: Raw input value to clamp.
+        minimum: Lowest allowed value.
+        maximum: Highest allowed value.
+        fallback: Value used when conversion fails.
+
+    Returns:
+        A float constrained to the provided range, or the fallback value.
+    """
     try:
         numeric = float(value)
     except (TypeError, ValueError):
@@ -60,6 +92,17 @@ def clamp_number(value: Any, minimum: float, maximum: float, fallback: float) ->
 
 
 def validate_bbox(raw_bbox: Any) -> list[float]:
+    """Validate and normalize a bbox.
+
+    Args:
+        raw_bbox: Incoming bbox value from the client.
+
+    Returns:
+        A normalized bbox in ``[west, south, east, north]`` order.
+
+    Raises:
+        ValueError: If the bbox shape or coordinate order is invalid.
+    """
     if not isinstance(raw_bbox, list) or len(raw_bbox) != 4:
         raise ValueError("Bounding box must contain west, south, east, and north values.")
     bbox = [round(float(value), 5) for value in raw_bbox]
@@ -70,6 +113,18 @@ def validate_bbox(raw_bbox: Any) -> list[float]:
 
 
 def validate_date_range(start_date: str, end_date: str) -> tuple[str, str]:
+    """Validate ISO date strings and normalize the date range.
+
+    Args:
+        start_date: Inclusive start date as ``YYYY-MM-DD``.
+        end_date: Inclusive end date as ``YYYY-MM-DD``.
+
+    Returns:
+        A tuple containing the normalized start and end date strings.
+
+    Raises:
+        ValueError: If either date is invalid or the range is reversed.
+    """
     try:
         start = date.fromisoformat(start_date)
         end = date.fromisoformat(end_date)
@@ -81,12 +136,29 @@ def validate_date_range(start_date: str, end_date: str) -> tuple[str, str]:
 
 
 def bbox_area(bbox: list[float] | None) -> float:
+    """Compute the area of a bbox.
+
+    Args:
+        bbox: Bounding box in ``[west, south, east, north]`` order.
+
+    Returns:
+        The bbox area in geographic coordinate-space units.
+    """
     if not bbox:
         return 0.0
     return max(0.0, bbox[2] - bbox[0]) * max(0.0, bbox[3] - bbox[1])
 
 
 def intersect_bboxes(a: list[float] | None, b: list[float] | None) -> list[float] | None:
+    """Compute the overlap between two bounding boxes.
+
+    Args:
+        a: First bbox.
+        b: Second bbox.
+
+    Returns:
+        The overlapping bbox, or ``None`` if the boxes do not intersect.
+    """
     if not a or not b:
         return None
     west = max(a[0], b[0])
@@ -99,6 +171,15 @@ def intersect_bboxes(a: list[float] | None, b: list[float] | None) -> list[float
 
 
 def compute_coverage_score(scene_bbox: list[float] | None, target_bbox: list[float] | None) -> float:
+    """Measure how much of the target AOI is covered by a scene.
+
+    Args:
+        scene_bbox: Scene footprint bbox.
+        target_bbox: Requested area-of-interest bbox.
+
+    Returns:
+        A fractional coverage score between 0 and 1.
+    """
     if not scene_bbox or not target_bbox:
         return 0.0
     intersection = intersect_bboxes(scene_bbox, target_bbox)
@@ -109,6 +190,15 @@ def compute_coverage_score(scene_bbox: list[float] | None, target_bbox: list[flo
 
 
 def scene_fully_covers_bbox(scene_bbox: list[float] | None, target_bbox: list[float] | None) -> bool:
+    """Check whether a scene fully contains the target bbox.
+
+    Args:
+        scene_bbox: Scene footprint bbox.
+        target_bbox: Requested area-of-interest bbox.
+
+    Returns:
+        ``True`` if the scene fully covers the target bbox, otherwise ``False``.
+    """
     if not scene_bbox or not target_bbox:
         return False
     return (
@@ -120,6 +210,15 @@ def scene_fully_covers_bbox(scene_bbox: list[float] | None, target_bbox: list[fl
 
 
 def resolve_frame_source(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Pick the best preview strategy exposed by a STAC item.
+
+    Args:
+        item: Raw STAC item.
+
+    Returns:
+        A dictionary describing how the item should be rendered, or ``None``
+        when no usable preview source is available.
+    """
     assets = item.get("assets") or {}
     thumbnail_link = next((link.get("href", "") for link in item.get("links", []) if link.get("rel") == "thumbnail"), "")
 
@@ -147,6 +246,14 @@ def resolve_frame_source(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def resolve_fallback_preview_url(item: dict[str, Any]) -> str:
+    """Resolve a plain preview image URL for a STAC item.
+
+    Args:
+        item: Raw STAC item.
+
+    Returns:
+        A preview image URL, or an empty string when none is available.
+    """
     source = resolve_frame_source(item)
     if source and source["type"] == "preview-image":
         return source["href"]
@@ -154,6 +261,14 @@ def resolve_fallback_preview_url(item: dict[str, Any]) -> str:
 
 
 def resolve_renderable_item_url(item: dict[str, Any]) -> str:
+    """Choose the STAC item URL used by downstream preview services.
+
+    Args:
+        item: Raw STAC item.
+
+    Returns:
+        The preferred item URL, or an empty string when none is suitable.
+    """
     links = item.get("links") or []
     if item.get("collection") == "landsat-c2-l2":
         via_link = next(
@@ -170,6 +285,16 @@ def resolve_renderable_item_url(item: dict[str, Any]) -> str:
 
 
 def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[float]) -> str:
+    """Build a TiTiler preview URL for one scene.
+
+    Args:
+        item_url: STAC item URL to render from.
+        source: Rendering strategy returned by ``resolve_frame_source``.
+        bbox: Requested area-of-interest bbox.
+
+    Returns:
+        A TiTiler URL that renders the requested AOI.
+    """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
     params: list[tuple[str, str]] = [
         ("url", item_url),
@@ -190,6 +315,15 @@ def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[
 
 
 def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]) -> str:
+    """Build a Planetary Computer preview URL for Landsat scenes.
+
+    Args:
+        item: Raw Landsat STAC item.
+        bbox: Requested area-of-interest bbox.
+
+    Returns:
+        A Planetary Computer preview URL.
+    """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
     params = [
         ("collection", item["collection"]),
@@ -211,6 +345,15 @@ def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]
 
 
 def resolve_frame_url(item: dict[str, Any], bbox: list[float]) -> str:
+    """Resolve the best frame URL for a scene preview.
+
+    Args:
+        item: Raw STAC item.
+        bbox: Requested area-of-interest bbox.
+
+    Returns:
+        The preferred preview URL, or an empty string if rendering is unavailable.
+    """
     frame_source = resolve_frame_source(item)
     if not frame_source:
         return ""
@@ -225,6 +368,16 @@ def resolve_frame_url(item: dict[str, Any], bbox: list[float]) -> str:
 
 
 def map_feature_to_scene(feature: dict[str, Any], requested_collection_id: str, bbox: list[float]) -> dict[str, Any]:
+    """Normalize a STAC item into the frontend scene shape.
+
+    Args:
+        feature: Raw STAC item feature.
+        requested_collection_id: Collection requested by the client.
+        bbox: Requested area-of-interest bbox.
+
+    Returns:
+        A normalized scene dictionary used by the frontend.
+    """
     properties = feature.get("properties") or {}
     scene_date = properties.get("datetime") or properties.get("start_datetime") or ""
     cloud_cover = properties.get("eo:cloud_cover")
@@ -250,10 +403,31 @@ def map_feature_to_scene(feature: dict[str, Any], requested_collection_id: str, 
 
 
 def resolve_search_api(collection_id: str) -> str:
+    """Map a collection identifier to its STAC search endpoint.
+
+    Args:
+        collection_id: Collection identifier selected by the user.
+
+    Returns:
+        The base STAC API URL for the collection.
+    """
     return PLANETARY_COMPUTER_STAC_API if collection_id == "landsat-c2-l2" else EARTH_SEARCH_API
 
 
 def build_search_payload(collection_id: str, bbox: list[float], start_date: str, end_date: str, max_cloud: int, limit: int) -> dict[str, Any]:
+    """Build the base STAC POST payload for a collection search.
+
+    Args:
+        collection_id: Collection identifier to search.
+        bbox: Requested area-of-interest bbox.
+        start_date: Inclusive start date.
+        end_date: Inclusive end date.
+        max_cloud: Maximum allowed cloud percentage.
+        limit: Maximum number of results to request.
+
+    Returns:
+        A JSON-serializable STAC search payload.
+    """
     return {
         "collections": [collection_id],
         "bbox": bbox,
@@ -265,6 +439,17 @@ def build_search_payload(collection_id: str, bbox: list[float], start_date: str,
 
 
 def build_next_page_request(next_link: dict[str, Any] | None, fallback_url: str, fallback_payload: dict[str, Any], remaining_limit: int) -> tuple[str, dict[str, Any]] | None:
+    """Convert a STAC ``next`` link into the next request to issue.
+
+    Args:
+        next_link: STAC pagination link from the previous response.
+        fallback_url: Base search URL used when the next link is relative.
+        fallback_payload: Base payload used when the next link omits a body.
+        remaining_limit: Number of remaining scenes still needed.
+
+    Returns:
+        A tuple of ``(url, request_options)`` or ``None`` when pagination stops.
+    """
     if not next_link or not next_link.get("href") or remaining_limit <= 0:
         return None
 
@@ -280,6 +465,19 @@ def build_next_page_request(next_link: dict[str, Any] | None, fallback_url: str,
 
 
 def fetch_paginated_scenes_for_collection(collection_id: str, bbox: list[float], start_date: str, end_date: str, max_cloud: int, limit: int) -> list[dict[str, Any]]:
+    """Fetch paginated STAC search results for one collection.
+
+    Args:
+        collection_id: Collection identifier to search.
+        bbox: Requested area-of-interest bbox.
+        start_date: Inclusive start date.
+        end_date: Inclusive end date.
+        max_cloud: Maximum allowed cloud percentage.
+        limit: Maximum number of normalized scenes to return.
+
+    Returns:
+        A list of normalized scene dictionaries.
+    """
     base_url = resolve_search_api(collection_id)
     initial_payload = build_search_payload(collection_id, bbox, start_date, end_date, max_cloud, limit)
     next_request: tuple[str, dict[str, Any]] | None = (
@@ -303,6 +501,15 @@ def fetch_paginated_scenes_for_collection(collection_id: str, bbox: list[float],
 
 
 def dedupe_scenes_by_day(scenes: list[dict[str, Any]], merged_mode: bool) -> list[dict[str, Any]]:
+    """Keep only the best scene per day.
+
+    Args:
+        scenes: Candidate normalized scenes.
+        merged_mode: Whether the merged collection mode is active.
+
+    Returns:
+        A chronologically sorted list with redundant same-day scenes removed.
+    """
     best_by_day: dict[str, dict[str, Any]] = {}
     for scene in scenes:
         base_day_key = scene["datetime"][:10] if scene["datetime"] else scene["id"]
@@ -321,6 +528,16 @@ def dedupe_scenes_by_day(scenes: list[dict[str, Any]], merged_mode: bool) -> lis
 
 
 def refine_scene_sequence(scenes: list[dict[str, Any]], sequence_mode: str, merged_mode: bool) -> list[dict[str, Any]]:
+    """Filter and order scenes into a timelapse-friendly sequence.
+
+    Args:
+        scenes: Candidate normalized scenes.
+        sequence_mode: Filtering mode selected by the user.
+        merged_mode: Whether the merged collection mode is active.
+
+    Returns:
+        A filtered, chronologically sorted list of scenes for playback.
+    """
     if not scenes:
         return []
 
@@ -341,6 +558,15 @@ def refine_scene_sequence(scenes: list[dict[str, Any]], sequence_mode: str, merg
 
 
 def compute_timeline_stats(scenes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute summary metrics shown in the timeline analytics panel.
+
+    Args:
+        scenes: Normalized scenes currently shown in the results.
+
+    Returns:
+        A dictionary containing counts, date range text, revisit time, and cloud
+        summary values for the frontend stats cards.
+    """
     if not scenes:
         return {
             "scene_count": 0,
@@ -366,10 +592,29 @@ def compute_timeline_stats(scenes: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def collection_ids_for(value: str) -> list[str]:
+    """Expand the selected collection option into concrete collection IDs.
+
+    Args:
+        value: Collection value coming from the UI.
+
+    Returns:
+        One or more collection IDs to search.
+    """
     return ["sentinel-2-l2a", "landsat-c2-l2"] if value == "merged" else [value]
 
 
 def parse_search_request(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize the JSON payload sent by the search form.
+
+    Args:
+        data: Raw JSON payload from the client.
+
+    Returns:
+        A validated search request dictionary.
+
+    Raises:
+        ValueError: If collection, sequence mode, bbox, or dates are invalid.
+    """
     collection = data.get("collection", DEFAULT_COLLECTION)
     if collection not in SUPPORTED_COLLECTIONS:
         raise ValueError("Collection is not supported.")
@@ -395,6 +640,14 @@ def parse_search_request(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def download_bytes(url: str) -> tuple[bytes, str]:
+    """Download one remote preview asset.
+
+    Args:
+        url: Remote preview URL.
+
+    Returns:
+        A tuple containing the raw response bytes and a practical file extension.
+    """
     response = EXPORT_SESSION.get(url, timeout=120)
     response.raise_for_status()
     content_type = response.headers.get("content-type", "")
@@ -407,6 +660,14 @@ def download_bytes(url: str) -> tuple[bytes, str]:
 
 
 def download_many(urls: list[str]) -> list[tuple[bytes, str]]:
+    """Download multiple remote assets in parallel.
+
+    Args:
+        urls: Remote preview URLs to download.
+
+    Returns:
+        A list of ``(bytes, extension)`` tuples in the same order as the input.
+    """
     if not urls:
         return []
 
@@ -416,6 +677,14 @@ def download_many(urls: list[str]) -> list[tuple[bytes, str]]:
 
 
 def fetch_animation_frames(frame_urls: list[str]) -> list[Image.Image]:
+    """Download and decode all frames needed for GIF export.
+
+    Args:
+        frame_urls: Preview URLs to use as animation frames.
+
+    Returns:
+        A list of RGB Pillow images ready for annotation/export.
+    """
     frames: list[Image.Image] = []
     for image_bytes, _ in download_many(frame_urls):
         with Image.open(BytesIO(image_bytes)) as image:
@@ -424,6 +693,15 @@ def fetch_animation_frames(frame_urls: list[str]) -> list[Image.Image]:
 
 
 def annotate_frame(image: Image.Image, label: str) -> Image.Image:
+    """Overlay scene metadata onto a frame before animation export.
+
+    Args:
+        image: Decoded frame image.
+        label: Text label to draw onto the frame.
+
+    Returns:
+        A copy of the frame image with the label overlay applied.
+    """
     annotated = image.copy()
     draw = ImageDraw.Draw(annotated)
     draw.rectangle((18, image.height - 66, min(image.width - 18, 460), image.height - 18), fill=(8, 17, 31, 180))
@@ -433,11 +711,21 @@ def annotate_frame(image: Image.Image, label: str) -> Image.Image:
 
 @app.get("/")
 def index() -> str:
+    """Render the main application page.
+
+    Returns:
+        The rendered HTML page.
+    """
     return render_template("index.html", initial_state=build_initial_state())
 
 
 @app.post("/api/search")
 def api_search() -> Response:
+    """Search STAC catalogs and return normalized scene results.
+
+    Returns:
+        A Flask JSON response containing normalized scenes and timeline stats.
+    """
     try:
         payload = parse_search_request(request.get_json(force=True, silent=False) or {})
         scene_sets = [
@@ -476,6 +764,11 @@ def api_search() -> Response:
 
 @app.post("/api/export/frames")
 def api_export_frames() -> Response:
+    """Download the current frame set and return it as a ZIP archive.
+
+    Returns:
+        A Flask file response containing a ZIP archive of frame images.
+    """
     data = request.get_json(force=True, silent=False) or {}
     scenes = data.get("scenes") or []
     frame_scenes = [scene for scene in scenes if scene.get("frame_url")]
@@ -495,6 +788,11 @@ def api_export_frames() -> Response:
 
 @app.post("/api/export/animation")
 def api_export_animation() -> Response:
+    """Render the current frame set into an animated GIF.
+
+    Returns:
+        A Flask file response containing an animated GIF export.
+    """
     data = request.get_json(force=True, silent=False) or {}
     scenes = data.get("scenes") or []
     fps = int(clamp_number(data.get("fps"), 1, 6, 2))

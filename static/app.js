@@ -1,5 +1,7 @@
+// Frontend controller for map interactions, search, playback, and result rendering.
 const config = window.APP_CONFIG;
 
+// Cache all DOM nodes that are updated frequently during the app lifecycle.
 const collectionSelect = document.querySelector("#collectionSelect");
 const startDateInput = document.querySelector("#startDateInput");
 const endDateInput = document.querySelector("#endDateInput");
@@ -34,6 +36,7 @@ const stacUrlLink = document.querySelector("#stacUrlLink");
 const stacUrlCode = document.querySelector("#stacUrlCode");
 const titilerUrlCode = document.querySelector("#titilerUrlCode");
 
+// Create the map and load the default satellite basemap first.
 const map = L.map("map", { zoomControl: true }).setView(config.default_center, config.default_zoom);
 L.control.scale({ imperial: false, metric: true }).addTo(map);
 
@@ -50,6 +53,7 @@ const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/
 
 satelliteLayer.addTo(map);
 
+// Scene footprints and the currently selected footprint are tracked separately.
 const aoiLayer = L.featureGroup().addTo(map);
 const footprintLayer = L.geoJSON(null, {
   style: () => ({ color: "#8f4d26", weight: 1.2, fillColor: "#8f4d26", fillOpacity: 0.04, opacity: 0.65 })
@@ -58,6 +62,7 @@ const highlightedLayer = L.geoJSON(null, {
   style: () => ({ color: "#173b63", weight: 1.8, fillColor: "#173b63", fillOpacity: 0.06, opacity: 0.75 })
 }).addTo(map);
 
+// Central UI state for the current AOI, search results, and player selection.
 const state = {
   bbox: null,
   aoiRectangle: null,
@@ -74,6 +79,7 @@ const state = {
 };
 
 function setStatus(message) {
+  // Surface short progress messages without using alert dialogs.
   statusText.textContent = message;
 }
 
@@ -105,6 +111,7 @@ function normalizeBounds(bounds) {
 }
 
 function setBBox(bbox, fitMap = true) {
+  // Persist the AOI and mirror it in both the map overlay and the text summary.
   state.bbox = bbox;
   bboxOutput.textContent = formatBBox(bbox);
 
@@ -257,6 +264,7 @@ function preloadPreviewUrl(url) {
 }
 
 function renderStats(stats) {
+  // Rebuild the summary cards from the latest backend stats payload.
   const cards = [
     { label: "Scenes", value: stats.scene_count ?? 0, note: "Frames in sequence" },
     { label: "Range", value: stats.range_label ?? "--", note: "Current timespan" },
@@ -273,6 +281,7 @@ function renderStats(stats) {
 }
 
 function renderTimeline() {
+  // Place timeline dots by capture date so temporal gaps are visible.
   state.timelineDots = [];
   timelineScale.innerHTML = "";
   timelineTrack.innerHTML = "";
@@ -327,6 +336,7 @@ function renderTimeline() {
 }
 
 function updateSelectionStyles() {
+  // Keep the active result card and active timeline dot visually in sync.
   state.resultCards.forEach((card, index) => {
     card.classList.toggle("active", index === state.selectedIndex);
   });
@@ -336,6 +346,7 @@ function updateSelectionStyles() {
 }
 
 function updateHighlightedScene(focusMap) {
+  // The selected scene footprint is drawn separately from the full footprint set.
   const selected = state.items[state.selectedIndex];
   highlightedLayer.clearLayers();
   if (selected && selected.geometry) {
@@ -350,6 +361,7 @@ function updateHighlightedScene(focusMap) {
 }
 
 function renderPlayer() {
+  // The preview panel only reflects the current selection; it does not own search state.
   setPlayerButtonState();
   if (!state.items.length || state.selectedIndex < 0) {
     playerImage.style.display = "none";
@@ -395,6 +407,7 @@ function renderPlayer() {
 }
 
 function renderResults() {
+  // Full result rendering happens once per search, not on every playback tick.
   state.resultCards = [];
   footprintLayer.clearLayers();
   highlightedLayer.clearLayers();
@@ -461,6 +474,7 @@ function findNextIndex(startIndex) {
 }
 
 async function advancePlayback() {
+  // Playback advances only through frames that can actually be loaded in the browser.
   if (!state.playing || state.items.length < 2) {
     return;
   }
@@ -537,6 +551,7 @@ async function postJson(url, payload) {
 }
 
 async function searchScenes() {
+  // Send the current filters and AOI to the backend search endpoint.
   if (!state.bbox) {
     setStatus("Choose an area before searching.");
     return;
@@ -581,6 +596,7 @@ async function searchScenes() {
 }
 
 async function downloadExport(url, payload, fileName) {
+  // Helper used by both export buttons to trigger browser downloads.
   const response = await postJson(url, payload);
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
@@ -611,6 +627,7 @@ async function downloadFrames() {
   }
 }
 
+// Wire all UI actions after function definitions so startup order stays predictable.
 drawAreaButton.addEventListener("click", toggleDrawing);
 viewAreaButton.addEventListener("click", () => {
   setBBox(normalizeBounds(map.getBounds()), false);
@@ -646,6 +663,7 @@ timelineInput.addEventListener("input", () => {
   selectScene(Number(timelineInput.value), false);
 });
 
+// Map click/drag events power the two-corner rectangle drawing workflow.
 map.on("click", (event) => {
   if (!state.drawing) {
     return;
@@ -676,6 +694,7 @@ map.on("mousemove", (event) => {
   state.tempRectangle.setBounds(L.latLngBounds(state.anchorLatLng, event.latlng));
 });
 
+// Keep preview load status so playback can skip frames that fail to load.
 playerImage.addEventListener("load", () => {
   markPreviewStatus(playerImage.currentSrc, "ready");
 });
@@ -698,6 +717,7 @@ playerImage.addEventListener("error", () => {
   }
 });
 
+// Bootstrap the initial empty UI, then draw the default AOI injected by Flask.
 renderStats({ scene_count: 0, range_label: "--", average_revisit_days: null, average_cloud_cover: null });
 renderResults();
 setPlayerButtonState();

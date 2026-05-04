@@ -1,3 +1,4 @@
+/* Global design tokens used across the app. */
 :root {
   --bg-top: #0b2238;
   --bg-mid: #7fb6c9;
@@ -13,6 +14,7 @@
   --shadow: 0 16px 34px rgba(20, 32, 43, 0.12);
 }
 
+/* Basic page-wide resets and typography defaults. */
 * {
   box-sizing: border-box;
 }
@@ -33,12 +35,14 @@ select {
   font: inherit;
 }
 
+/* Overall page layout containers. */
 .page-shell {
   width: min(1280px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.5rem 0 2rem;
 }
 
+/* Shared panel framing for the glass-like card look. */
 .hero-panel,
 .panel {
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -140,6 +144,7 @@ select {
   font-size: 0.92rem;
 }
 
+/* Form controls and compact tooltip helpers. */
 .form-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -147,6 +152,7 @@ select {
 }
 
 .field {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -167,6 +173,7 @@ select {
 
 .inline-info {
   position: relative;
+  z-index: 5;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -186,12 +193,14 @@ select {
   box-shadow: 0 0 0 3px rgba(23, 59, 99, 0.12);
 }
 
+/* Reusable tooltip used by both field help and area-selection help. */
 .inline-popover {
   position: absolute;
   top: calc(100% + 0.35rem);
   left: 0;
-  z-index: 30;
+  z-index: 60;
   width: min(16rem, 70vw);
+  min-width: 12rem;
   padding: 0.55rem 0.65rem;
   border-radius: 12px;
   border: 1px solid rgba(23, 59, 99, 0.1);
@@ -203,6 +212,21 @@ select {
   pointer-events: none;
   transform: translateY(-4px);
   transition: opacity 120ms ease, transform 120ms ease;
+  white-space: normal;
+  overflow-wrap: break-word;
+  box-shadow: 0 12px 24px rgba(20, 32, 43, 0.28);
+}
+
+.inline-popover,
+.inline-popover * {
+  color: #f7f7f5;
+}
+
+.field .inline-popover,
+.field .inline-popover *,
+.field-label .inline-popover,
+.field-label .inline-popover * {
+  color: #f7f7f5;
 }
 
 .inline-info:hover .inline-popover,
@@ -247,6 +271,7 @@ select {
   box-shadow: 0 0 0 3px rgba(23, 59, 99, 0.12);
 }
 
+/* Buttons, status cards, and general control chrome. */
 .action-row,
 .player-controls {
   display: flex;
@@ -313,6 +338,7 @@ select {
   word-break: break-word;
 }
 
+/* Selected file URL cards shown below the preview. */
 .url-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -360,6 +386,7 @@ select {
   word-break: break-word;
 }
 
+/* Area-selection toolbar placed above the map for discoverability. */
 .map-toolbar {
   display: flex;
   gap: 0.6rem;
@@ -500,6 +527,7 @@ select {
   font-size: 0.85rem;
 }
 
+/* Analytics timeline styling and timeline dots. */
 .timeline-track {
   position: relative;
   min-height: 48px;
@@ -525,6 +553,7 @@ select {
   height: 16px;
 }
 
+/* Scene cards and their thumbnail previews. */
 .results-list {
   display: grid;
   gap: 0.7rem;
@@ -574,6 +603,7 @@ select {
   padding: 0.4rem;
 }
 
+/* Player stage and compact export controls. */
 .player-stage {
   min-height: 480px;
   display: grid;
@@ -610,6 +640,7 @@ select {
   display: none;
 }
 
+/* Responsive adjustments for tablet/mobile layouts. */
 @media (max-width: 960px) {
   .workspace-grid,
   .media-row {
