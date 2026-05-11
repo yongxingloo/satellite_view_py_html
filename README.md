@@ -47,7 +47,7 @@ From the repository root, choose one of these run modes:
 - `requirements.txt`
   Dependency list for the direct requirements-based run flow.
 
-- [.gitignore](D:\Idea League\ETHZ\AI Assisted Coding\satellite_view_py_html\.gitignore)
+- [.gitignore](.gitignore)
   Git ignore rules for Python cache files.
 
 ## Backend flow
