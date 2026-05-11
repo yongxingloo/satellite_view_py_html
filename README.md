@@ -8,22 +8,44 @@ This project is a small satellite timelapse viewer built with a Flask backend an
 - inspect source URLs for the selected frame
 - export the current sequence as a ZIP of frames or an animated GIF
 
+## Quick-start guide
+
+From the repository root, choose one of these run modes:
+
+1. **Installed package run (recommended)**
+   ```bash
+   pip install .
+   satellite_view
+   ```
+2. **Requirements-based run (no package install command)**
+   ```bash
+   pip install -r requirements.txt
+   python app.py
+   ```
+
+
 ## Project structure
 
-- [app.py](D:\Idea League\ETHZ\AI Assisted Coding\satellite_view_py_html\app.py)
+- `satellite_view/webapp.py`
   The Flask application. It serves the page, searches STAC APIs, normalizes scene data, builds preview URLs, and handles exports.
 
-- [templates/index.html](D:\Idea League\ETHZ\AI Assisted Coding\satellite_view_py_html\templates\index.html)
+- `satellite_view/cli.py`
+  The package CLI entry point. It starts the app server and opens the browser by default.
+
+- `satellite_view/templates/index.html`
   The main page template. It defines the visible UI structure for filters, map, analytics, scene cards, and the preview panel.
 
-- [static/app.js](D:\Idea League\ETHZ\AI Assisted Coding\satellite_view_py_html\static\app.js)
+- `satellite_view/static/app.js`
   The frontend controller. It manages map drawing, area selection, search requests, timeline rendering, scene selection, playback, and export button behavior.
 
-- [static/styles.css](D:\Idea League\ETHZ\AI Assisted Coding\satellite_view_py_html\static\styles.css)
+- `satellite_view/static/styles.css`
   The application stylesheet. It defines layout, spacing, map toolbars, scene cards, timeline visuals, and responsive behavior.
 
-- [requirements.txt](D:\Idea League\ETHZ\AI Assisted Coding\satellite_view_py_html\requirements.txt)
-  Python dependencies needed to run the backend.
+- `pyproject.toml`
+  Packaging metadata, dependencies, and the `satellite_view` console script declaration.
+
+- `requirements.txt`
+  Dependency list for the direct requirements-based run flow.
 
 - [.gitignore](D:\Idea League\ETHZ\AI Assisted Coding\satellite_view_py_html\.gitignore)
   Git ignore rules for Python cache files.
@@ -57,22 +79,6 @@ This project is a small satellite timelapse viewer built with a Flask backend an
 
 - `coverage_score`
   A fractional measure of how much of the selected AOI is covered by a given scene.
-
-## Running the project
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run the Flask app:
-
-```bash
-python app.py
-```
-
-Then open the local server in your browser.
 
 ## Why the code is commented
 
