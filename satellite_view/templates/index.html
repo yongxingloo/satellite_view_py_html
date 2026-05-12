@@ -22,8 +22,8 @@
   <!-- Page shell containing the hero, controls, map, analytics, results, and preview. -->
   <main class="page-shell">
     <section class="hero-panel">
-      <p class="eyebrow">Satellite Timelapse</p>
-      <h1>satelliteview</h1>
+      <p class="eyebrow"></p>
+      <h1>Satellite view</h1>
       <p class="hero-copy">
         Pick an area, load satellite images, and play them back as a timelapse.
         It is a simple way to look at how a place changes over time.
@@ -44,7 +44,7 @@
         <!-- Main filter form. Each field is paired with a small inline help tooltip. -->
         <div class="form-grid">
           <label class="field">
-            <span class="field-label">Collection <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Pick which satellite data to search.</span></span></span>
+            <span class="field-label">Collection <span class="inline-info" tabindex="0">ⓘ<span class="inline-popover">Select the specific satellite source (Sentinel or Landsat) for your data search.</span></span></span>
             <select id="collectionSelect">
               <option value="sentinel-2-l2a" selected>Sentinel-2 L2A</option>
               <option value="landsat-c2-l2">Landsat</option>
@@ -53,27 +53,27 @@
           </label>
 
           <label class="field">
-            <span class="field-label">Start date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">The first date to include in the search.</span></span></span>
+            <span class="field-label">Start date <span class="inline-info" tabindex="0">ⓘ<span class="inline-popover">The beginning of the time period you want to visualize.</span></span></span>
             <input id="startDateInput" type="date" value="{{ initial_state.default_start_date }}">
           </label>
 
           <label class="field">
-            <span class="field-label">End date <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">The last date to include in the search.</span></span></span>
+            <span class="field-label">End date <span class="inline-info" tabindex="0">ⓘ<span class="inline-popover">The end of the time period you want to visualize.</span></span></span>
             <input id="endDateInput" type="date" value="{{ initial_state.default_end_date }}">
           </label>
 
           <label class="field">
-            <span class="field-label">Cloud cover max (%) <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Lower values usually mean cleaner images, but fewer matches.</span></span></span>
+            <span class="field-label">Cloud cover max (%) <span class="inline-info" tabindex="0">ⓘ<span class="inline-popover">Maximum allowable cloud percentage; lower values yield clearer images, but give less data.</span></span></span>
             <input id="cloudInput" type="number" min="0" max="100" value="{{ initial_state.default_cloud }}">
           </label>
 
           <label class="field">
-            <span class="field-label">Scene limit <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Limits how many scenes are loaded.</span></span></span>
+            <span class="field-label">Scene limit <span class="inline-info" tabindex="0">ⓘ<span class="inline-popover">Maximum number of individual satellite captures to retrieve.</span></span></span>
             <input id="limitInput" type="number" min="5" max="500" value="{{ initial_state.default_limit }}">
           </label>
 
           <label class="field">
-            <span class="field-label">Sequence <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Changes how strict the filtering is for the timelapse.</span></span></span>
+            <span class="field-label">Sequence <span class="inline-info" tabindex="0">ⓘ<span class="inline-popover">Filtering logic that determines how strictly images align by location and timing.</span></span></span>
             <select id="sequenceModeSelect">
               <option value="balanced" selected>Balanced</option>
               <option value="strict">Strict alignment</option>
