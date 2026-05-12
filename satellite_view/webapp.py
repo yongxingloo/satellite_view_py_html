@@ -755,6 +755,95 @@ def annotate_frame(image: Image.Image, label: str) -> Image.Image:
     return annotated
 
 
+# -----------------------------
+# Point-to-bbox helpers & API
+# -----------------------------
+MAX_RADIUS_METERS = 100000  # safety cap to avoid terribly large AOIs
+MIN_RADIUS_METERS = 10  # avoid tiny AOIs smaller than typical satellite pixel resolution
+_METERS_PER_DEGREE_LAT = 111320.0
+
+
+def parse_radius_to_meters(raw: Any) -> float:
+    """Parse a radius input (e.g. '500', '500m', '1.2km') into meters.
+
+    Args:
+        raw: Raw radius value from the client.
+
+    Returns:
+        Radius in meters.
+
+    Raises:
+        ValueError: If the value cannot be parsed or is out of range.
+    """
+    if raw is None:
+        raise ValueError("Radius is required.")
+    s = str(raw).strip().lower()
+    if not s:
+        raise ValueError("Radius is required.")
+    try:
+        if s.endswith("km"):
+            value = float(s[:-2]) * 1000.0
+        elif s.endswith("m"):
+            value = float(s[:-1])
+        else:
+            value = float(s)
+    except ValueError as exc:
+        raise ValueError("Radius must be a number optionally suffixed with 'm' or 'km'.") from exc
+    if value <= 0:
+        raise ValueError("Radius must be positive.")
+    if value < MIN_RADIUS_METERS:
+        raise ValueError(f"Radius is too small (min {MIN_RADIUS_METERS} m).")
+    if value > MAX_RADIUS_METERS:
+        raise ValueError(f"Radius is too large (max {MAX_RADIUS_METERS} m).")
+    return value
+
+
+def point_to_bbox(lat: float, lon: float, radius_m: float) -> list[float]:
+    """Compute a square bbox (west,south,east,north) centered on (lat,lon).
+
+    Uses a simple equirectangular approximation converting meters to degrees.
+    This is sufficient for the small-to-moderate radii this UI expects.
+    """
+    # convert lat delta (degrees)
+    delta_lat = radius_m / _METERS_PER_DEGREE_LAT
+    # convert lon delta accounting for latitude compression
+    lon_factor = max(cos(radians(lat)), 1e-6)
+    delta_lon = radius_m / (_METERS_PER_DEGREE_LAT * lon_factor)
+    west = lon - delta_lon
+    south = lat - delta_lat
+    east = lon + delta_lon
+    north = lat + delta_lat
+    return [round(west, 5), round(south, 5), round(east, 5), round(north, 5)]
+
+
+@app.post("/api/resolve_point")
+def api_resolve_point() -> Response:
+    """Resolve a lat/lon + radius into a normalized bbox.
+
+    Expected JSON body: { "lat": "47.37", "lon": "8.54", "radius": "500m" }
+
+    Returns JSON: { "bbox": [west, south, east, north], "center": [lon, lat] }
+    """
+    try:
+        data = request.get_json(force=True, silent=False) or {}
+        raw_lat = data.get("lat")
+        raw_lon = data.get("lon")
+        raw_radius = data.get("radius")
+        if raw_lat is None or raw_lon is None or raw_radius is None:
+            raise ValueError("lat, lon and radius are required fields")
+        lat = float(str(raw_lat).strip())
+        lon = float(str(raw_lon).strip())
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+            raise ValueError("Latitude must be between -90 and 90 and longitude between -180 and 180.")
+        radius_m = parse_radius_to_meters(raw_radius)
+        bbox = point_to_bbox(lat, lon, radius_m)
+        # validate bbox ordering
+        validate_bbox(bbox)
+        return jsonify({"bbox": bbox, "center": [round(lon, 5), round(lat, 5)]})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @app.get("/")
 def index() -> str:
     """Render the main application page.
