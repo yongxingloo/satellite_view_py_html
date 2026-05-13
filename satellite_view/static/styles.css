@@ -37,13 +37,58 @@ select {
 
 /* Overall page layout containers. */
 .page-shell {
-  width: min(1280px, calc(100% - 2rem));
-  margin: 0 auto;
-  padding: 1.5rem 0 2rem;
+  width: 100%; /* Take full width */
+  margin: 0; 
+  padding: 1.5rem 1rem 2rem; /* Added 1rem padding so text doesn't touch the very edge */
 }
 
 /* Shared panel framing for the glass-like card look. */
-.hero-panel,
+.hero-panel {
+padding: 2.5rem;
+  margin-bottom: 1.5rem;
+  position: relative; /* Essential for the absolute pseudo-element */
+  overflow: hidden;    /* Prevents the blurred edges from leaking out */
+  border: 1px solid var(--line);
+  border-radius: 22px; /* Matches your other panels */
+  /* Make sure your text is readable over the image */
+  color: white; 
+  /* --- ADD/UPDATE THESE LINES --- */
+  min-height: 250px;        /* Sets a base height (adjust this number as needed) */
+  padding: 5rem 2.5rem;    /* Increases top/bottom padding to 5rem */
+display: flex;
+  flex-direction: column;
+  align-items: center;    /* Centers items horizontally */
+  justify-content: center; /* Centers items vertically */
+  text-align: center;      /* Centers the text lines themselves */
+}
+
+.hero-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0; /* Places it behind the text */
+  
+  /* Background image setup */
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)), /* Darkens image for text contrast */
+    url('figures/earth.jpg');
+  background-size: cover;
+  background-position: center;
+  
+  /* The Blur Effect */
+  filter: blur(8px);
+  transform: scale(1.1); /* Scaling up prevents white "halo" edges from the blur */
+}
+
+/* This ensures your H1 and copy stay on top of the background */
+.hero-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 .panel {
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 22px;
@@ -80,7 +125,9 @@ select {
 }
 
 .hero-copy,
-.panel-copy,
+.panel-copy {
+  max-width: 100%; /* Allows the text to spread across the new wider panels */
+}
 .result-content p,
 .empty-state {
   color: var(--muted);
@@ -94,30 +141,29 @@ select {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-columns: 1fr; /* Changed from 360px 1fr to just 1fr */
+  gap: 1.5rem;                /* Slightly more space between vertical panels */
+  width: 100%;
 }
 
 .panel {
   padding: 1rem;
 }
 
+/* Change these assignments */
 .controls-panel,
-.results-panel {
-  grid-column: 1;
-}
-
+.results-panel,
 .map-panel,
 .analytics-panel,
 .media-row {
-  grid-column: 2;
+  grid-column: auto; /* Changed from specific numbers to auto */
 }
 
 .media-row {
   display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  grid-template-columns: 1fr; /* Ensure the video area is also full width */
   gap: 1rem;
+  width: 100%;
 }
 
 .panel-heading {
@@ -146,15 +192,15 @@ select {
 /* Form controls and compact tooltip helpers. */
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
+  grid-template-columns: repeat(3, 1fr); /* Forces exactly 3 equal columns */
+  gap: 1.25rem; /* Space between the inputs */
 }
 
 .field {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  justify-content: flex-end; /* Keeps inputs aligned even if labels vary in height */
+  height: 100%;
 }
 
 .field span,
@@ -273,10 +319,10 @@ select {
 /* Buttons, status cards, and general control chrome. */
 .action-row,
 .player-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-top: 0.9rem;
+  display: grid; /* Changed from flex to grid for better control */
+  grid-template-columns: repeat(3, 1fr); /* 3 buttons per row */
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
 
 .button,
@@ -624,7 +670,9 @@ select {
 
 /* Player stage and compact export controls. */
 .player-stage {
-  min-height: 480px;
+  width: 100%;
+  min-height: 320px;
+  max-height: 75vh;
   display: grid;
   place-items: center;
   border-radius: 24px;
@@ -634,9 +682,11 @@ select {
 
 .player-stage img {
   display: none;
+  max-width: 100%;
+  max-height: 75vh;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  object-fit: contain;
 }
 
 .player-placeholder {
@@ -680,6 +730,7 @@ select {
 
   .player-stage {
     min-height: 320px;
+    max-height: 60vh;
   }
 
   .result-card {
