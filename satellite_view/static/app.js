@@ -27,7 +27,6 @@ const resultsPager = document.querySelector("#resultsPager");
 const statsGrid = document.querySelector("#statsGrid");
 const timelineScale = document.querySelector("#timelineScale");
 const timelineTrack = document.querySelector("#timelineTrack");
-const playerStage = document.querySelector(".player-stage");
 const playerImage = document.querySelector("#playerImage");
 const playerPlaceholder = document.querySelector("#playerPlaceholder");
 const playerTitle = document.querySelector("#playerTitle");
@@ -421,7 +420,6 @@ function renderPlayer() {
   // The preview panel only reflects the current selection; it does not own search state.
   setPlayerButtonState();
   if (!state.items.length || state.selectedIndex < 0) {
-    playerStage?.style.removeProperty("aspect-ratio");
     playerImage.style.display = "none";
     playerImage.removeAttribute("src");
     playerPlaceholder.hidden = false;
@@ -458,7 +456,6 @@ function renderPlayer() {
     playerImage.style.display = "block";
     playerPlaceholder.hidden = true;
   } else {
-    playerStage?.style.removeProperty("aspect-ratio");
     playerImage.style.display = "none";
     playerImage.removeAttribute("src");
     playerPlaceholder.hidden = false;
@@ -795,16 +792,12 @@ map.on("mousemove", (event) => {
 // Keep preview load status so playback can skip frames that fail to load.
 playerImage.addEventListener("load", () => {
   markPreviewStatus(playerImage.currentSrc, "ready");
-  if (playerImage.naturalWidth > 0 && playerImage.naturalHeight > 0) {
-    playerStage?.style.setProperty("aspect-ratio", `${playerImage.naturalWidth} / ${playerImage.naturalHeight}`);
-  }
 });
 
 playerImage.addEventListener("error", () => {
   const selected = state.items[state.selectedIndex];
   const previewUrl = resolveScenePreviewUrl(selected);
   markPreviewStatus(previewUrl, "error");
-  playerStage?.style.removeProperty("aspect-ratio");
   playerImage.style.display = "none";
   playerImage.removeAttribute("src");
   playerPlaceholder.hidden = false;

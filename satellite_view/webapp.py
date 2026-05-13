@@ -11,7 +11,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from io import BytesIO
-from math import cos, radians
 from pathlib import Path
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -119,41 +118,6 @@ def validate_bbox(raw_bbox: Any) -> list[float]:
     if west >= east or south >= north:
         raise ValueError("Bounding box coordinates are invalid.")
     return bbox
-
-
-def compute_preview_dimensions(bbox: list[float], max_side: int = 900, min_side: int = 64) -> tuple[int, int]:
-    """Choose preview dimensions that preserve near-square ground pixels.
-
-    The preview services accept explicit pixel dimensions. If we always request
-    a square image for a very elongated AOI, the service stretches the bbox into
-    that square and the resulting x/y pixel sizes diverge. We instead size the
-    raster from the AOI aspect ratio, correcting longitudinal span by latitude.
-
-    Args:
-        bbox: Bounding box in ``[west, south, east, north]`` order.
-        max_side: Pixel size assigned to the longer image side.
-        min_side: Smallest pixel size allowed for the shorter side.
-
-    Returns:
-        A ``(width, height)`` tuple suitable for preview requests.
-    """
-    west, south, east, north = bbox
-    mean_latitude = (south + north) / 2
-    longitude_span = max(east - west, 1e-9)
-    latitude_span = max(north - south, 1e-9)
-
-    # Approximate east-west ground distance in EPSG:4326 by shrinking
-    # longitude degrees with cos(latitude).
-    adjusted_width = longitude_span * max(cos(radians(mean_latitude)), 1e-6)
-    aspect_ratio = adjusted_width / latitude_span
-
-    if aspect_ratio >= 1:
-        width = max_side
-        height = max(min_side, int(round(max_side / aspect_ratio)))
-    else:
-        height = max_side
-        width = max(min_side, int(round(max_side * aspect_ratio)))
-    return width, height
 
 
 def validate_date_range(start_date: str, end_date: str) -> tuple[str, str]:
@@ -340,11 +304,10 @@ def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[
         A TiTiler URL that renders the requested AOI.
     """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
-    width, height = compute_preview_dimensions(bbox)
     params: list[tuple[str, str]] = [
         ("url", item_url),
-        ("width", str(width)),
-        ("height", str(height)),
+        ("width", "900"),
+        ("height", "900"),
         ("rescale", "0,4000"),
         ("coord_crs", "epsg:4326"),
         ("dst_crs", "epsg:4326"),
@@ -355,7 +318,7 @@ def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[
         params.append(("asset_as_band", "true"))
         params.extend([("rescale", "0,4000"), ("rescale", "0,4000")])
     prepared = requests.PreparedRequest()
-    prepared.prepare_url(f"{TITILER_STAC_API}/{bbox_path}/{width}x{height}.png", params)
+    prepared.prepare_url(f"{TITILER_STAC_API}/{bbox_path}/900x900.png", params)
     return prepared.url or ""
 
 
@@ -370,12 +333,11 @@ def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]
         A Planetary Computer preview URL.
     """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
-    width, height = compute_preview_dimensions(bbox)
     params = [
         ("collection", item["collection"]),
         ("item", item["id"]),
-        ("width", str(width)),
-        ("height", str(height)),
+        ("width", "900"),
+        ("height", "900"),
         ("format", "png"),
         ("coord_crs", "epsg:4326"),
         ("dst_crs", "epsg:4326"),
@@ -386,7 +348,7 @@ def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]
         ("asset_as_band", "true"),
     ]
     prepared = requests.PreparedRequest()
-    prepared.prepare_url(f"{PLANETARY_COMPUTER_DATA_API}/bbox/{bbox_path}/{width}x{height}.png", params)
+    prepared.prepare_url(f"{PLANETARY_COMPUTER_DATA_API}/bbox/{bbox_path}/900x900.png", params)
     return prepared.url or ""
 
 
