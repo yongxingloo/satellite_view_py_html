@@ -6,6 +6,9 @@ Run from the repository root with:
 """
 
 import pytest
+from unittest.mock import patch, MagicMock
+
+
 from satellite_view.webapp import (
     to_date_input,
     build_initial_state,
@@ -426,3 +429,150 @@ def test_compute_timeline_stats_no_cloud_data():
     scenes = [_make_scene("2023-06-01T00:00:00Z", cloud=None)]
     stats = compute_timeline_stats(scenes)
     assert stats["average_cloud_cover"] is None
+
+## Note: Flask route tests and mocked external API calls can be found below
+## the pure function tests. To extend further, consider adding:
+## - Tests for `annotate_frame` (GIF label overlay)
+## - Tests for `build_search_payload` (STAC query construction)
+## - Tests for `build_next_page_request` (pagination logic)
+## - Tests for `resolve_search_api` (collection to API URL mapping)
+## - Mocked tests for `api_export/animation` with real PIL images
+
+@pytest.fixture
+def client():
+    from satellite_view.webapp import app as flask_app
+    flask_app.config["TESTING"] = True
+    with flask_app.test_client() as client:
+        yield client
+
+def test_index_returns_200(client):
+    response = client.get("/")
+    assert response.status_code == 200
+
+def test_index_contains_html(client):
+    response = client.get("/")
+    assert b"<html" in response.data.lower()
+
+
+def test_search_missing_bbox_returns_400(client):
+    response = client.post("/api/search", json={
+        "collection": "sentinel-2-l2a",
+        "sequence_mode": "balanced",
+        "start_date": "2023-01-01",
+        "end_date": "2023-12-31",
+    })
+    assert response.status_code == 400
+
+def test_search_invalid_collection_returns_400(client):
+    response = client.post("/api/search", json={
+        "collection": "fake-collection",
+        "bbox": [-10.0, -5.0, 10.0, 5.0],
+        "start_date": "2023-01-01",
+        "end_date": "2023-12-31",
+    })
+    assert response.status_code == 400
+
+def test_search_reversed_dates_returns_400(client):
+    response = client.post("/api/search", json={
+        "collection": "sentinel-2-l2a",
+        "bbox": [-10.0, -5.0, 10.0, 5.0],
+        "start_date": "2023-12-31",
+        "end_date": "2023-01-01",
+    })
+    assert response.status_code == 400
+
+def test_search_invalid_sequence_mode_returns_400(client):
+    response = client.post("/api/search", json={
+        "collection": "sentinel-2-l2a",
+        "sequence_mode": "random",
+        "bbox": [-10.0, -5.0, 10.0, 5.0],
+        "start_date": "2023-01-01",
+        "end_date": "2023-12-31",
+    })
+    assert response.status_code == 400
+
+def test_search_returns_scenes(client):
+    fake_response = MagicMock()
+    fake_response.raise_for_status.return_value = None
+    fake_response.json.return_value = {
+        "features": [{
+            "id": "scene-001",
+            "collection": "sentinel-2-l2a",
+            "bbox": [-10.0, -5.0, 10.0, 5.0],
+            "geometry": None,
+            "properties": {
+                "datetime": "2023-06-01T10:00:00Z",
+                "eo:cloud_cover": 5,
+            },
+            "assets": {"thumbnail": {"href": "http://thumb.png"}},
+            "links": [{"rel": "self", "href": "http://self"}],
+        }],
+        "links": [],
+    }
+    with patch("requests.request", return_value=fake_response):
+        response = client.post("/api/search", json={
+            "collection": "sentinel-2-l2a",
+            "sequence_mode": "balanced",
+            "bbox": [-10.0, -5.0, 10.0, 5.0],
+            "start_date": "2023-01-01",
+            "end_date": "2023-12-31",
+        })
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["scenes"][0]["id"] == "scene-001"
+
+def test_search_returns_stats(client):
+    fake_response = MagicMock()
+    fake_response.raise_for_status.return_value = None
+    fake_response.json.return_value = {
+        "features": [{
+            "id": "scene-001",
+            "collection": "sentinel-2-l2a",
+            "bbox": [-10.0, -5.0, 10.0, 5.0],
+            "geometry": None,
+            "properties": {
+                "datetime": "2023-06-01T10:00:00Z",
+                "eo:cloud_cover": 5,
+            },
+            "assets": {"thumbnail": {"href": "http://thumb.png"}},
+            "links": [{"rel": "self", "href": "http://self"}],
+        }],
+        "links": [],
+    }
+    with patch("requests.request", return_value=fake_response):
+        response = client.post("/api/search", json={
+            "collection": "sentinel-2-l2a",
+            "sequence_mode": "balanced",
+            "bbox": [-10.0, -5.0, 10.0, 5.0],
+            "start_date": "2023-01-01",
+            "end_date": "2023-12-31",
+        })
+    data = response.get_json()
+    assert "stats" in data
+    assert data["stats"]["scene_count"] == 1
+
+def test_export_frames_no_scenes_returns_400(client):
+    response = client.post("/api/export/frames", json={"scenes": []})
+    assert response.status_code == 400
+
+def test_export_frames_returns_zip(client):
+    fake_response = MagicMock()
+    fake_response.raise_for_status.return_value = None
+    fake_response.headers = {"content-type": "image/png"}
+    fake_response.content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+    with patch.object(__import__("satellite_view.webapp", fromlist=["EXPORT_SESSION"]).EXPORT_SESSION, "get", return_value=fake_response):
+        response = client.post("/api/export/frames", json={
+            "scenes": [{"id": "s1", "frame_url": "http://fake.png", "datetime": "2023-06-01T00:00:00Z"}]
+        })
+    assert response.status_code == 200
+    assert response.content_type == "application/zip"
+
+def test_export_animation_too_few_scenes_returns_400(client):
+    response = client.post("/api/export/animation", json={
+        "scenes": [{"frame_url": "http://x", "id": "s1"}]
+    })
+    assert response.status_code == 400
+
+def test_export_animation_no_scenes_returns_400(client):
+    response = client.post("/api/export/animation", json={"scenes": []})
+    assert response.status_code == 400
