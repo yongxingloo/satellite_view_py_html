@@ -670,9 +670,7 @@ display: flex;
 
 /* Player stage and compact export controls. */
 .player-stage {
-  width: 100%;
-  min-height: 320px;
-  max-height: 75vh;
+  min-height: 480px;
   display: grid;
   place-items: center;
   border-radius: 24px;
@@ -682,11 +680,9 @@ display: flex;
 
 .player-stage img {
   display: none;
-  max-width: 100%;
-  max-height: 75vh;
   width: 100%;
-  height: auto;
-  object-fit: contain;
+  height: 100%;
+  object-fit: cover;
 }
 
 .player-placeholder {
@@ -730,7 +726,6 @@ display: flex;
 
   .player-stage {
     min-height: 320px;
-    max-height: 60vh;
   }
 
   .result-card {

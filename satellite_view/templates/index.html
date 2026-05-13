@@ -126,8 +126,28 @@
           <div class="area-toolbar-actions">
             <button id="drawAreaButton" type="button" class="button button-primary">Draw area</button>
             <button id="viewAreaButton" type="button" class="button">Use map view</button>
+            <button id="chooseLatLonButton" type="button" class="button">Use lat/lon</button>
             <button id="clearAreaButton" type="button" class="button">Clear</button>
           </div>
+
+          <!-- Manual lat/lon + radius inputs (hidden until Use lat/lon selected) -->
+          <div id="latlonInputs" class="area-toolbar-manual" style="display:none; margin-top:0.5rem;">
+            <label class="inline-field">
+              <span>Latitude</span>
+              <input id="latInput" type="text" placeholder="47.3769">
+            </label>
+            <label class="inline-field">
+              <span>Longitude</span>
+              <input id="lonInput" type="text" placeholder="8.5417">
+            </label>
+            <label class="inline-field">
+              <span>Radius</span>
+              <input id="radiusInput" type="text" placeholder="500m or 1.2km">
+            </label>
+            <button id="latlonPreviewButton" type="button" class="button button-primary">Preview area</button>
+            <span class="inline-info" tabindex="0">(<span>i</span>)<span class="inline-popover">Enter decimal degrees (lat, lon). Radius accepts meters (e.g. 500) or suffix km (e.g. 1.2km). Example: 47.3769, 8.5417, 500m.</span></span>
+          </div>
+
           <!-- The selected bbox is mirrored here so users can verify the current AOI. -->
           <div class="area-output-wrap">
             <span class="status-label">Selected area</span>

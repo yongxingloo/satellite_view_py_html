@@ -27,7 +27,6 @@ const resultsPager = document.querySelector("#resultsPager");
 const statsGrid = document.querySelector("#statsGrid");
 const timelineScale = document.querySelector("#timelineScale");
 const timelineTrack = document.querySelector("#timelineTrack");
-const playerStage = document.querySelector(".player-stage");
 const playerImage = document.querySelector("#playerImage");
 const playerPlaceholder = document.querySelector("#playerPlaceholder");
 const playerTitle = document.querySelector("#playerTitle");
@@ -37,6 +36,77 @@ const fileUrlText = document.querySelector("#fileUrlText");
 const stacUrlLink = document.querySelector("#stacUrlLink");
 const stacUrlCode = document.querySelector("#stacUrlCode");
 const titilerUrlCode = document.querySelector("#titilerUrlCode");
+
+// Manual lat/lon controls (minimal JS; backend performs parsing & bbox math)
+const latInput = document.querySelector("#latInput");
+const lonInput = document.querySelector("#lonInput");
+const radiusInput = document.querySelector("#radiusInput");
+const chooseLatLonButton = document.querySelector("#chooseLatLonButton");
+const latlonInputs = document.querySelector("#latlonInputs");
+const latlonPreviewButton = document.querySelector("#latlonPreviewButton");
+let currentAreaMode = null; // 'draw' | 'view' | 'latlon' | null
+
+function applyButtonSelectionStyle(btn, selected) {
+  if (!btn) return;
+  if (selected) {
+    // ensure it looks selected: use primary class and explicit colors
+    btn.classList.add('button-primary');
+    btn.style.backgroundColor = "#173b63"; // dark blue
+    btn.style.color = "#ffffff";
+  } else {
+    // remove primary styling so it appears as an unselected white button
+    btn.classList.remove('button-primary');
+    btn.style.backgroundColor = "";
+    btn.style.color = "";
+  }
+}
+
+function setAreaMode(mode) {
+  // mode: 'draw', 'view', 'latlon', or null
+  if (mode === currentAreaMode) {
+    // toggle off
+    mode = null;
+  }
+  currentAreaMode = mode;
+
+  const isDraw = mode === 'draw';
+  const isView = mode === 'view';
+  const isLatLon = mode === 'latlon';
+
+  // visual state - only one button will appear selected
+  applyButtonSelectionStyle(drawAreaButton, isDraw);
+  applyButtonSelectionStyle(viewAreaButton, isView);
+  applyButtonSelectionStyle(chooseLatLonButton, isLatLon);
+
+  // show/hide manual inputs
+  if (latlonInputs) {
+    latlonInputs.style.display = isLatLon ? '' : 'none';
+  }
+
+  // drawing behavior (start/stop) - keep legacy drawing functions but coordinate via setAreaMode
+  if (isDraw) {
+    if (!state.drawing) {
+      startDrawing();
+    }
+    // inform user
+    setStatus('Click two opposite corners on the map.');
+  } else {
+    if (state.drawing) {
+      stopDrawing();
+    }
+  }
+
+  // view behavior: if selected, set bbox to map view immediately
+  if (isView) {
+    setBBox(normalizeBounds(map.getBounds()), false);
+    setStatus("Using the current map view.");
+  } else if (isLatLon) {
+    setStatus("Lat/lon mode selected. Enter coordinates and click Preview area.");
+  } else if (mode === null) {
+    setStatus('Area selection cleared.');
+  }
+}
+
 
 // Create the map and load the default satellite basemap first.
 const map = L.map("map", { zoomControl: true }).setView(config.default_center, config.default_zoom);
@@ -421,7 +491,6 @@ function renderPlayer() {
   // The preview panel only reflects the current selection; it does not own search state.
   setPlayerButtonState();
   if (!state.items.length || state.selectedIndex < 0) {
-    playerStage?.style.removeProperty("aspect-ratio");
     playerImage.style.display = "none";
     playerImage.removeAttribute("src");
     playerPlaceholder.hidden = false;
@@ -458,7 +527,6 @@ function renderPlayer() {
     playerImage.style.display = "block";
     playerPlaceholder.hidden = true;
   } else {
-    playerStage?.style.removeProperty("aspect-ratio");
     playerImage.style.display = "none";
     playerImage.removeAttribute("src");
     playerPlaceholder.hidden = false;
@@ -725,12 +793,13 @@ async function downloadFrames() {
 }
 
 // Wire all UI actions after function definitions so startup order stays predictable.
-drawAreaButton.addEventListener("click", toggleDrawing);
 viewAreaButton.addEventListener("click", () => {
   setBBox(normalizeBounds(map.getBounds()), false);
   setStatus("Using the current map view.");
 });
 clearAreaButton.addEventListener("click", () => {
+  // Reset area mode and UI
+  setAreaMode(null);
   stopPlayback();
   stopDrawing();
   state.items = [];
@@ -750,6 +819,80 @@ satelliteLayerButton.addEventListener("click", () => setActiveMapLayer("satellit
 playButton.addEventListener("click", togglePlayback);
 exportButton.addEventListener("click", exportAnimation);
 downloadFramesButton.addEventListener("click", downloadFrames);
+
+// chooseLatLonButton toggles the lat/lon input mode
+chooseLatLonButton?.addEventListener("click", () => setAreaMode('latlon'));
+
+function showFieldError(field) {
+  if (!field) return;
+  field.classList.add('field-error');
+  field.style.borderColor = '#d9534f';
+  field.setAttribute('aria-invalid', 'true');
+}
+function clearFieldError(field) {
+  if (!field) return;
+  field.classList.remove('field-error');
+  field.style.borderColor = '';
+  field.removeAttribute('aria-invalid');
+}
+
+// clear errors when user types
+[latInput, lonInput, radiusInput].forEach((el) => el?.addEventListener('input', () => clearFieldError(el)));
+
+// latlonPreviewButton performs the server call to preview/draw the bbox with client-side validation
+latlonPreviewButton?.addEventListener("click", async () => {
+  try {
+    const lat = latInput?.value?.trim();
+    const lon = lonInput?.value?.trim();
+    const radius = radiusInput?.value?.trim();
+    let hasError = false;
+    clearFieldError(latInput); clearFieldError(lonInput); clearFieldError(radiusInput);
+    if (!lat) { showFieldError(latInput); hasError = true; }
+    if (!lon) { showFieldError(lonInput); hasError = true; }
+    if (!radius) { showFieldError(radiusInput); hasError = true; }
+    if (hasError) { setStatus('Please fill required fields.'); return; }
+    const latNum = Number(lat);
+    const lonNum = Number(lon);
+    if (Number.isNaN(latNum) || latNum < -90 || latNum > 90) { showFieldError(latInput); setStatus('Latitude must be a number between -90 and 90.'); return; }
+    if (Number.isNaN(lonNum) || lonNum < -180 || lonNum > 180) { showFieldError(lonInput); setStatus('Longitude must be a number between -180 and 180.'); return; }
+    // basic radius parse
+    const r = radius.toLowerCase();
+    let rMeters = NaN;
+    if (r.endsWith('km')) { rMeters = parseFloat(r.slice(0,-2)) * 1000; }
+    else if (r.endsWith('m')) { rMeters = parseFloat(r.slice(0,-1)); }
+    else { rMeters = parseFloat(r); }
+    const MIN_RADIUS_METERS = 10; const MAX_RADIUS_METERS = 100000;
+    if (Number.isNaN(rMeters) || rMeters <= 0) { showFieldError(radiusInput); setStatus('Radius must be a positive number, optionally suffixed with m or km.'); return; }
+    if (rMeters < MIN_RADIUS_METERS) { showFieldError(radiusInput); setStatus(`Radius is too small (min ${MIN_RADIUS_METERS} m).`); return; }
+    if (rMeters > MAX_RADIUS_METERS) { showFieldError(radiusInput); setStatus(`Radius is too large (max ${MAX_RADIUS_METERS} m).`); return; }
+    setStatus("Resolving lat/lon to bbox...");
+    const response = await postJson("/api/resolve_point", { lat: latNum, lon: lonNum, radius });
+    const data = await response.json();
+    if (data?.bbox) {
+      setBBox(data.bbox, true);
+      setStatus("Area previewed from lat/lon.");
+    } else {
+      setStatus(data?.error || "Unexpected response from server.");
+    }
+  } catch (err) {
+    // Highlight fields based on server error messages when possible
+    const msg = String(err && err.message ? err.message : err);
+    const lower = msg.toLowerCase();
+    if (lower.includes('latitude') || lower.includes('lat')) showFieldError(latInput);
+    if (lower.includes('longitude') || lower.includes('lon')) showFieldError(lonInput);
+    if (lower.includes('radius')) showFieldError(radiusInput);
+    setStatus(msg);
+  }
+});
+
+// adapt existing buttons to use setAreaMode
+// replace draw and view handlers to use setAreaMode
+
+
+// Wire original handlers to call setAreaMode instead
+drawAreaButton.addEventListener("click", () => setAreaMode('draw'));
+viewAreaButton.addEventListener("click", () => setAreaMode('view'));
+
 speedInput.addEventListener("input", () => {
   if (state.playing) {
     stopPlayback();
@@ -795,16 +938,12 @@ map.on("mousemove", (event) => {
 // Keep preview load status so playback can skip frames that fail to load.
 playerImage.addEventListener("load", () => {
   markPreviewStatus(playerImage.currentSrc, "ready");
-  if (playerImage.naturalWidth > 0 && playerImage.naturalHeight > 0) {
-    playerStage?.style.setProperty("aspect-ratio", `${playerImage.naturalWidth} / ${playerImage.naturalHeight}`);
-  }
 });
 
 playerImage.addEventListener("error", () => {
   const selected = state.items[state.selectedIndex];
   const previewUrl = resolveScenePreviewUrl(selected);
   markPreviewStatus(previewUrl, "error");
-  playerStage?.style.removeProperty("aspect-ratio");
   playerImage.style.display = "none";
   playerImage.removeAttribute("src");
   playerPlaceholder.hidden = false;

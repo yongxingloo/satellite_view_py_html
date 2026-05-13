@@ -11,7 +11,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from io import BytesIO
-from math import cos, radians
 from pathlib import Path
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -119,41 +118,6 @@ def validate_bbox(raw_bbox: Any) -> list[float]:
     if west >= east or south >= north:
         raise ValueError("Bounding box coordinates are invalid.")
     return bbox
-
-
-def compute_preview_dimensions(bbox: list[float], max_side: int = 900, min_side: int = 64) -> tuple[int, int]:
-    """Choose preview dimensions that preserve near-square ground pixels.
-
-    The preview services accept explicit pixel dimensions. If we always request
-    a square image for a very elongated AOI, the service stretches the bbox into
-    that square and the resulting x/y pixel sizes diverge. We instead size the
-    raster from the AOI aspect ratio, correcting longitudinal span by latitude.
-
-    Args:
-        bbox: Bounding box in ``[west, south, east, north]`` order.
-        max_side: Pixel size assigned to the longer image side.
-        min_side: Smallest pixel size allowed for the shorter side.
-
-    Returns:
-        A ``(width, height)`` tuple suitable for preview requests.
-    """
-    west, south, east, north = bbox
-    mean_latitude = (south + north) / 2
-    longitude_span = max(east - west, 1e-9)
-    latitude_span = max(north - south, 1e-9)
-
-    # Approximate east-west ground distance in EPSG:4326 by shrinking
-    # longitude degrees with cos(latitude).
-    adjusted_width = longitude_span * max(cos(radians(mean_latitude)), 1e-6)
-    aspect_ratio = adjusted_width / latitude_span
-
-    if aspect_ratio >= 1:
-        width = max_side
-        height = max(min_side, int(round(max_side / aspect_ratio)))
-    else:
-        height = max_side
-        width = max(min_side, int(round(max_side * aspect_ratio)))
-    return width, height
 
 
 def validate_date_range(start_date: str, end_date: str) -> tuple[str, str]:
@@ -340,11 +304,10 @@ def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[
         A TiTiler URL that renders the requested AOI.
     """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
-    width, height = compute_preview_dimensions(bbox)
     params: list[tuple[str, str]] = [
         ("url", item_url),
-        ("width", str(width)),
-        ("height", str(height)),
+        ("width", "900"),
+        ("height", "900"),
         ("rescale", "0,4000"),
         ("coord_crs", "epsg:4326"),
         ("dst_crs", "epsg:4326"),
@@ -355,7 +318,7 @@ def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[
         params.append(("asset_as_band", "true"))
         params.extend([("rescale", "0,4000"), ("rescale", "0,4000")])
     prepared = requests.PreparedRequest()
-    prepared.prepare_url(f"{TITILER_STAC_API}/{bbox_path}/{width}x{height}.png", params)
+    prepared.prepare_url(f"{TITILER_STAC_API}/{bbox_path}/900x900.png", params)
     return prepared.url or ""
 
 
@@ -370,12 +333,11 @@ def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]
         A Planetary Computer preview URL.
     """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
-    width, height = compute_preview_dimensions(bbox)
     params = [
         ("collection", item["collection"]),
         ("item", item["id"]),
-        ("width", str(width)),
-        ("height", str(height)),
+        ("width", "900"),
+        ("height", "900"),
         ("format", "png"),
         ("coord_crs", "epsg:4326"),
         ("dst_crs", "epsg:4326"),
@@ -386,7 +348,7 @@ def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]
         ("asset_as_band", "true"),
     ]
     prepared = requests.PreparedRequest()
-    prepared.prepare_url(f"{PLANETARY_COMPUTER_DATA_API}/bbox/{bbox_path}/{width}x{height}.png", params)
+    prepared.prepare_url(f"{PLANETARY_COMPUTER_DATA_API}/bbox/{bbox_path}/900x900.png", params)
     return prepared.url or ""
 
 
@@ -753,6 +715,95 @@ def annotate_frame(image: Image.Image, label: str) -> Image.Image:
     draw.rectangle((18, image.height - 66, min(image.width - 18, 460), image.height - 18), fill=(8, 17, 31, 180))
     draw.text((32, image.height - 56), label, fill=(237, 245, 255))
     return annotated
+
+
+# -----------------------------
+# Point-to-bbox helpers & API
+# -----------------------------
+MAX_RADIUS_METERS = 100000  # safety cap to avoid terribly large AOIs
+MIN_RADIUS_METERS = 10  # avoid tiny AOIs smaller than typical satellite pixel resolution
+_METERS_PER_DEGREE_LAT = 111320.0
+
+
+def parse_radius_to_meters(raw: Any) -> float:
+    """Parse a radius input (e.g. '500', '500m', '1.2km') into meters.
+
+    Args:
+        raw: Raw radius value from the client.
+
+    Returns:
+        Radius in meters.
+
+    Raises:
+        ValueError: If the value cannot be parsed or is out of range.
+    """
+    if raw is None:
+        raise ValueError("Radius is required.")
+    s = str(raw).strip().lower()
+    if not s:
+        raise ValueError("Radius is required.")
+    try:
+        if s.endswith("km"):
+            value = float(s[:-2]) * 1000.0
+        elif s.endswith("m"):
+            value = float(s[:-1])
+        else:
+            value = float(s)
+    except ValueError as exc:
+        raise ValueError("Radius must be a number optionally suffixed with 'm' or 'km'.") from exc
+    if value <= 0:
+        raise ValueError("Radius must be positive.")
+    if value < MIN_RADIUS_METERS:
+        raise ValueError(f"Radius is too small (min {MIN_RADIUS_METERS} m).")
+    if value > MAX_RADIUS_METERS:
+        raise ValueError(f"Radius is too large (max {MAX_RADIUS_METERS} m).")
+    return value
+
+
+def point_to_bbox(lat: float, lon: float, radius_m: float) -> list[float]:
+    """Compute a square bbox (west,south,east,north) centered on (lat,lon).
+
+    Uses a simple equirectangular approximation converting meters to degrees.
+    This is sufficient for the small-to-moderate radii this UI expects.
+    """
+    # convert lat delta (degrees)
+    delta_lat = radius_m / _METERS_PER_DEGREE_LAT
+    # convert lon delta accounting for latitude compression
+    lon_factor = max(cos(radians(lat)), 1e-6)
+    delta_lon = radius_m / (_METERS_PER_DEGREE_LAT * lon_factor)
+    west = lon - delta_lon
+    south = lat - delta_lat
+    east = lon + delta_lon
+    north = lat + delta_lat
+    return [round(west, 5), round(south, 5), round(east, 5), round(north, 5)]
+
+
+@app.post("/api/resolve_point")
+def api_resolve_point() -> Response:
+    """Resolve a lat/lon + radius into a normalized bbox.
+
+    Expected JSON body: { "lat": "47.37", "lon": "8.54", "radius": "500m" }
+
+    Returns JSON: { "bbox": [west, south, east, north], "center": [lon, lat] }
+    """
+    try:
+        data = request.get_json(force=True, silent=False) or {}
+        raw_lat = data.get("lat")
+        raw_lon = data.get("lon")
+        raw_radius = data.get("radius")
+        if raw_lat is None or raw_lon is None or raw_radius is None:
+            raise ValueError("lat, lon and radius are required fields")
+        lat = float(str(raw_lat).strip())
+        lon = float(str(raw_lon).strip())
+        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+            raise ValueError("Latitude must be between -90 and 90 and longitude between -180 and 180.")
+        radius_m = parse_radius_to_meters(raw_radius)
+        bbox = point_to_bbox(lat, lon, radius_m)
+        # validate bbox ordering
+        validate_bbox(bbox)
+        return jsonify({"bbox": bbox, "center": [round(lon, 5), round(lat, 5)]})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @app.get("/")
