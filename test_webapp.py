@@ -6,7 +6,7 @@ Run from the repository root with:
 """
 
 import pytest
-from app import (
+from satellite_view.webapp import (
     to_date_input,
     build_initial_state,
     clamp_number,
