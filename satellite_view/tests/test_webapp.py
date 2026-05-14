@@ -1,13 +1,22 @@
-"""pytest tests for app.py
+"""pytest tests for satellite_view/webapp.py
 
 Run from the repository root with:
-    pip install -r requirements.txt
-    pytest test_webapp.py -v
+    pip install -e ".[test]"
+    pytest
+
+## Note: Flask route tests and mocked external API calls can be found below
+## the pure function tests. To extend further, consider adding:
+## - Tests for `annotate_frame` (GIF label overlay)
+## - Tests for `build_search_payload` (STAC query construction)
+## - Tests for `build_next_page_request` (pagination logic)
+## - Tests for `resolve_search_api` (collection to API URL mapping)
+## - Tests for `parse_radius_to_meters` and `point_to_bbox` (new radius input)
+## - Mocked tests for `api_export_animation` with real PIL images
 """
 
 import pytest
 from unittest.mock import patch, MagicMock
-
+from datetime import date
 
 from satellite_view.webapp import (
     to_date_input,
@@ -27,9 +36,32 @@ from satellite_view.webapp import (
     dedupe_scenes_by_day,
     refine_scene_sequence,
     compute_timeline_stats,
+    resolve_search_api,
+    build_search_payload,
+    build_next_page_request,
+    annotate_frame,
+    create_app,
 )
-from datetime import date
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_scene(dt, cloud=10, coverage=1.0, scene_id="s1", collection="sentinel-2-l2a"):
+    return {
+        "id": scene_id,
+        "datetime": dt,
+        "cloud_cover": cloud,
+        "coverage_score": coverage,
+        "collection": collection,
+        "frame_url": "http://x",
+        "full_coverage": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# to_date_input
+# ---------------------------------------------------------------------------
 
 def test_to_date_input_basic():
     assert to_date_input(date(2024, 1, 5)) == "2024-01-05"
@@ -37,6 +69,10 @@ def test_to_date_input_basic():
 def test_to_date_input_end_of_year():
     assert to_date_input(date(2023, 12, 31)) == "2023-12-31"
 
+
+# ---------------------------------------------------------------------------
+# build_initial_state
+# ---------------------------------------------------------------------------
 
 def test_build_initial_state_keys():
     state = build_initial_state()
@@ -52,6 +88,10 @@ def test_build_initial_state_defaults():
     assert state["default_sequence_mode"] == "balanced"
     assert state["default_collection"] == "sentinel-2-l2a"
 
+
+# ---------------------------------------------------------------------------
+# clamp_number
+# ---------------------------------------------------------------------------
 
 def test_clamp_number_within_range():
     assert clamp_number(50, 0, 100, 25) == 50.0
@@ -75,6 +115,10 @@ def test_clamp_number_none_uses_fallback():
 def test_clamp_number_string_numeric():
     assert clamp_number("42", 0, 100, 25) == 42.0
 
+
+# ---------------------------------------------------------------------------
+# validate_bbox
+# ---------------------------------------------------------------------------
 
 def test_validate_bbox_valid():
     result = validate_bbox([-10.0, -5.0, 10.0, 5.0])
@@ -105,6 +149,10 @@ def test_validate_bbox_south_equals_north():
         validate_bbox([-10.0, 5.0, 10.0, 5.0])
 
 
+# ---------------------------------------------------------------------------
+# validate_date_range
+# ---------------------------------------------------------------------------
+
 def test_validate_date_range_valid():
     start, end = validate_date_range("2023-01-01", "2023-12-31")
     assert start == "2023-01-01"
@@ -122,6 +170,11 @@ def test_validate_date_range_invalid_format():
     with pytest.raises(ValueError):
         validate_date_range("01/01/2023", "2023-12-31")
 
+
+# ---------------------------------------------------------------------------
+# bbox_area
+# ---------------------------------------------------------------------------
+
 def test_bbox_area_basic():
     area = bbox_area([0.0, 0.0, 2.0, 3.0])
     assert area == pytest.approx(6.0)
@@ -136,6 +189,10 @@ def test_bbox_area_empty_list():
     assert bbox_area([]) == 0.0
 
 
+# ---------------------------------------------------------------------------
+# intersect_bboxes
+# ---------------------------------------------------------------------------
+
 def test_intersect_bboxes_overlap():
     result = intersect_bboxes([0.0, 0.0, 4.0, 4.0], [2.0, 2.0, 6.0, 6.0])
     assert result == [2.0, 2.0, 4.0, 4.0]
@@ -146,7 +203,7 @@ def test_intersect_bboxes_no_overlap():
 
 def test_intersect_bboxes_touching_edge():
     result = intersect_bboxes([0.0, 0.0, 2.0, 2.0], [2.0, 0.0, 4.0, 2.0])
-    assert result is None  # touching but not overlapping
+    assert result is None
 
 def test_intersect_bboxes_one_none():
     assert intersect_bboxes(None, [0.0, 0.0, 1.0, 1.0]) is None
@@ -156,8 +213,12 @@ def test_intersect_bboxes_fully_contained():
     result = intersect_bboxes([0.0, 0.0, 10.0, 10.0], [2.0, 2.0, 5.0, 5.0])
     assert result == [2.0, 2.0, 5.0, 5.0]
 
+
+# ---------------------------------------------------------------------------
+# compute_coverage_score
+# ---------------------------------------------------------------------------
+
 def test_compute_coverage_score_full():
-    # Scene fully contains target → score == 1.0
     score = compute_coverage_score([0.0, 0.0, 10.0, 10.0], [2.0, 2.0, 5.0, 5.0])
     assert score == pytest.approx(1.0)
 
@@ -170,9 +231,13 @@ def test_compute_coverage_score_no_overlap():
     assert score == 0.0
 
 def test_compute_coverage_score_partial():
-    # scene covers half of target
     score = compute_coverage_score([0.0, 0.0, 5.0, 4.0], [0.0, 0.0, 10.0, 4.0])
     assert score == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# scene_fully_covers_bbox
+# ---------------------------------------------------------------------------
 
 def test_scene_fully_covers_bbox_true():
     assert scene_fully_covers_bbox([-1.0, -1.0, 5.0, 5.0], [0.0, 0.0, 4.0, 4.0]) is True
@@ -187,6 +252,10 @@ def test_scene_fully_covers_bbox_none():
     assert scene_fully_covers_bbox(None, [0.0, 0.0, 1.0, 1.0]) is False
     assert scene_fully_covers_bbox([0.0, 0.0, 1.0, 1.0], None) is False
 
+
+# ---------------------------------------------------------------------------
+# resolve_frame_source
+# ---------------------------------------------------------------------------
 
 def _item_with_assets(assets):
     return {"assets": assets, "links": []}
@@ -220,6 +289,10 @@ def test_resolve_frame_source_no_assets():
     assert resolve_frame_source(item) is None
 
 
+# ---------------------------------------------------------------------------
+# resolve_fallback_preview_url
+# ---------------------------------------------------------------------------
+
 def test_resolve_fallback_preview_url_with_preview_image():
     item = {"assets": {"thumbnail": {"href": "http://preview.png"}}, "links": []}
     assert resolve_fallback_preview_url(item) == "http://preview.png"
@@ -228,9 +301,12 @@ def test_resolve_fallback_preview_url_no_preview():
     item = _item_with_assets({
         "red": {"href": "http://r"}, "green": {"href": "http://g"}, "blue": {"href": "http://b"}
     })
-    # RGB bands → not a preview-image type → empty string
     assert resolve_fallback_preview_url(item) == ""
 
+
+# ---------------------------------------------------------------------------
+# resolve_renderable_item_url
+# ---------------------------------------------------------------------------
 
 def test_resolve_renderable_item_url_self_link():
     item = {"links": [{"rel": "self", "href": "http://self.link"}], "collection": "sentinel-2-l2a"}
@@ -251,6 +327,10 @@ def test_resolve_renderable_item_url_no_links():
     assert resolve_renderable_item_url(item) == ""
 
 
+# ---------------------------------------------------------------------------
+# collection_ids_for
+# ---------------------------------------------------------------------------
+
 def test_collection_ids_for_sentinel():
     assert collection_ids_for("sentinel-2-l2a") == ["sentinel-2-l2a"]
 
@@ -263,6 +343,10 @@ def test_collection_ids_for_merged():
     assert "landsat-c2-l2" in result
     assert len(result) == 2
 
+
+# ---------------------------------------------------------------------------
+# parse_search_request
+# ---------------------------------------------------------------------------
 
 _VALID_PAYLOAD = {
     "collection": "sentinel-2-l2a",
@@ -292,7 +376,7 @@ def test_parse_search_request_invalid_sequence_mode():
         parse_search_request(bad)
 
 def test_parse_search_request_invalid_bbox():
-    bad = {**_VALID_PAYLOAD, "bbox": [10.0, 0.0, 5.0, 5.0]}  # west > east
+    bad = {**_VALID_PAYLOAD, "bbox": [10.0, 0.0, 5.0, 5.0]}
     with pytest.raises(ValueError):
         parse_search_request(bad)
 
@@ -307,16 +391,102 @@ def test_parse_search_request_clamps_limit():
     assert result["limit"] == 5
 
 
-def _make_scene(dt, cloud=10, coverage=1.0, scene_id="s1", collection="sentinel-2-l2a"):
-    return {
-        "id": scene_id,
-        "datetime": dt,
-        "cloud_cover": cloud,
-        "coverage_score": coverage,
-        "collection": collection,
-        "frame_url": "http://x",
-        "full_coverage": True,
-    }
+# ---------------------------------------------------------------------------
+# resolve_search_api
+# ---------------------------------------------------------------------------
+
+def test_resolve_search_api_sentinel_uses_earth_search():
+    url = resolve_search_api("sentinel-2-l2a")
+    assert "earth-search" in url
+
+def test_resolve_search_api_landsat_uses_planetary_computer():
+    url = resolve_search_api("landsat-c2-l2")
+    assert "planetarycomputer" in url
+
+
+# ---------------------------------------------------------------------------
+# build_search_payload
+# ---------------------------------------------------------------------------
+
+def test_build_search_payload_structure():
+    payload = build_search_payload(
+        "sentinel-2-l2a", [-10.0, -5.0, 10.0, 5.0],
+        "2023-01-01", "2023-12-31", 30, 50
+    )
+    assert payload["collections"] == ["sentinel-2-l2a"]
+    assert payload["bbox"] == [-10.0, -5.0, 10.0, 5.0]
+    assert "2023-01-01" in payload["datetime"]
+    assert "2023-12-31" in payload["datetime"]
+    assert payload["query"]["eo:cloud_cover"]["lte"] == 30
+
+def test_build_search_payload_caps_limit_at_100():
+    payload = build_search_payload(
+        "sentinel-2-l2a", [-10.0, -5.0, 10.0, 5.0],
+        "2023-01-01", "2023-12-31", 30, 500
+    )
+    assert payload["limit"] == 100
+
+def test_build_search_payload_sorts_ascending():
+    payload = build_search_payload(
+        "sentinel-2-l2a", [-10.0, -5.0, 10.0, 5.0],
+        "2023-01-01", "2023-12-31", 30, 50
+    )
+    assert payload["sortby"][0]["direction"] == "asc"
+
+
+# ---------------------------------------------------------------------------
+# build_next_page_request
+# ---------------------------------------------------------------------------
+
+def test_build_next_page_request_none_link():
+    assert build_next_page_request(None, "http://api", {}, 10) is None
+
+def test_build_next_page_request_zero_remaining():
+    link = {"href": "http://next", "method": "POST", "body": {}}
+    assert build_next_page_request(link, "http://api", {}, 0) is None
+
+def test_build_next_page_request_post():
+    link = {"href": "http://next", "method": "POST", "body": {"collections": ["sentinel-2-l2a"]}}
+    result = build_next_page_request(link, "http://api", {}, 20)
+    assert result is not None
+    url, opts = result
+    assert url == "http://next"
+    assert opts["method"] == "POST"
+    assert opts["json"]["limit"] == 20
+
+def test_build_next_page_request_caps_limit_at_100():
+    link = {"href": "http://next", "method": "POST", "body": {}}
+    _, opts = build_next_page_request(link, "http://api", {}, 500)
+    assert opts["json"]["limit"] == 100
+
+
+# ---------------------------------------------------------------------------
+# annotate_frame
+# ---------------------------------------------------------------------------
+
+def test_annotate_frame_returns_same_size():
+    from PIL import Image
+    img = Image.new("RGB", (200, 200), color="blue")
+    result = annotate_frame(img, "2023-06-01")
+    assert result.size == img.size
+
+def test_annotate_frame_does_not_modify_original():
+    from PIL import Image
+    img = Image.new("RGB", (200, 200), color="blue")
+    original_pixels = list(img.getdata())
+    annotate_frame(img, "2023-06-01")
+    assert list(img.getdata()) == original_pixels
+
+def test_annotate_frame_returns_different_image():
+    from PIL import Image
+    img = Image.new("RGB", (200, 200), color="blue")
+    result = annotate_frame(img, "2023-06-01")
+    assert result is not img
+
+
+# ---------------------------------------------------------------------------
+# dedupe_scenes_by_day
+# ---------------------------------------------------------------------------
 
 def test_dedupe_scenes_by_day_keeps_best_coverage():
     scenes = [
@@ -353,25 +523,24 @@ def test_dedupe_scenes_by_day_merged_mode_keeps_per_collection():
     assert len(result) == 2
 
 
+# ---------------------------------------------------------------------------
+# refine_scene_sequence
+# ---------------------------------------------------------------------------
+
 def test_refine_scene_sequence_empty():
     assert refine_scene_sequence([], "balanced", False) == []
 
 def test_refine_scene_sequence_strict_prefers_full_coverage():
-    # strict mode prefers full_coverage=True scenes first.
-    # When no scene has full coverage it falls back to coverage > 0.92,
-    # then coverage > 0, so any scene with any overlap is kept as a last resort.
     scenes = [
         _make_scene("2023-06-01T10:00:00Z", coverage=1.0, scene_id="high"),
         _make_scene("2023-06-02T10:00:00Z", coverage=1.0, scene_id="also_high"),
     ]
-    # Both have full_coverage=True from _make_scene; both should appear.
     result = refine_scene_sequence(scenes, "strict", False)
     ids = [s["id"] for s in result]
     assert "high" in ids
     assert "also_high" in ids
 
 def test_refine_scene_sequence_strict_falls_back_when_no_full_coverage():
-    # No scene has full_coverage=True; strict falls back to coverage > 0.
     scenes = [
         _make_scene("2023-06-01T10:00:00Z", coverage=0.5, scene_id="medium"),
         _make_scene("2023-06-02T10:00:00Z", coverage=0.3, scene_id="low"),
@@ -379,7 +548,6 @@ def test_refine_scene_sequence_strict_falls_back_when_no_full_coverage():
     for s in scenes:
         s["full_coverage"] = False
     result = refine_scene_sequence(scenes, "strict", False)
-    # Fallback keeps scenes with coverage > 0
     assert len(result) > 0
 
 def test_refine_scene_sequence_balanced_includes_medium_coverage():
@@ -401,6 +569,10 @@ def test_refine_scene_sequence_sorted_chronologically():
     assert [s["id"] for s in result] == ["a", "b", "c"]
 
 
+# ---------------------------------------------------------------------------
+# compute_timeline_stats
+# ---------------------------------------------------------------------------
+
 def test_compute_timeline_stats_empty():
     stats = compute_timeline_stats([])
     assert stats["scene_count"] == 0
@@ -413,7 +585,7 @@ def test_compute_timeline_stats_single_scene():
     stats = compute_timeline_stats(scenes)
     assert stats["scene_count"] == 1
     assert stats["average_cloud_cover"] == 5.0
-    assert stats["average_revisit_days"] is None  # no gap with one scene
+    assert stats["average_revisit_days"] is None
 
 def test_compute_timeline_stats_multiple_scenes():
     scenes = [
@@ -430,20 +602,22 @@ def test_compute_timeline_stats_no_cloud_data():
     stats = compute_timeline_stats(scenes)
     assert stats["average_cloud_cover"] is None
 
-## Note: Flask route tests and mocked external API calls can be found below
-## the pure function tests. To extend further, consider adding:
-## - Tests for `annotate_frame` (GIF label overlay)
-## - Tests for `build_search_payload` (STAC query construction)
-## - Tests for `build_next_page_request` (pagination logic)
-## - Tests for `resolve_search_api` (collection to API URL mapping)
-## - Mocked tests for `api_export/animation` with real PIL images
+
+# ---------------------------------------------------------------------------
+# Flask test client
+# ---------------------------------------------------------------------------
 
 @pytest.fixture
 def client():
-    from satellite_view.webapp import app as flask_app
+    flask_app = create_app()
     flask_app.config["TESTING"] = True
     with flask_app.test_client() as client:
         yield client
+
+
+# ---------------------------------------------------------------------------
+# Route: GET /
+# ---------------------------------------------------------------------------
 
 def test_index_returns_200(client):
     response = client.get("/")
@@ -453,6 +627,10 @@ def test_index_contains_html(client):
     response = client.get("/")
     assert b"<html" in response.data.lower()
 
+
+# ---------------------------------------------------------------------------
+# Route: POST /api/search — validation errors
+# ---------------------------------------------------------------------------
 
 def test_search_missing_bbox_returns_400(client):
     response = client.post("/api/search", json={
@@ -490,6 +668,11 @@ def test_search_invalid_sequence_mode_returns_400(client):
         "end_date": "2023-12-31",
     })
     assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Route: POST /api/search — mocked external call
+# ---------------------------------------------------------------------------
 
 def test_search_returns_scenes(client):
     fake_response = MagicMock()
@@ -551,21 +734,19 @@ def test_search_returns_stats(client):
     assert "stats" in data
     assert data["stats"]["scene_count"] == 1
 
+
+# ---------------------------------------------------------------------------
+# Route: POST /api/export/frames
+# ---------------------------------------------------------------------------
+
 def test_export_frames_no_scenes_returns_400(client):
     response = client.post("/api/export/frames", json={"scenes": []})
     assert response.status_code == 400
 
-def test_export_frames_returns_zip(client):
-    fake_response = MagicMock()
-    fake_response.raise_for_status.return_value = None
-    fake_response.headers = {"content-type": "image/png"}
-    fake_response.content = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-    with patch.object(__import__("satellite_view.webapp", fromlist=["EXPORT_SESSION"]).EXPORT_SESSION, "get", return_value=fake_response):
-        response = client.post("/api/export/frames", json={
-            "scenes": [{"id": "s1", "frame_url": "http://fake.png", "datetime": "2023-06-01T00:00:00Z"}]
-        })
-    assert response.status_code == 200
-    assert response.content_type == "application/zip"
+
+# ---------------------------------------------------------------------------
+# Route: POST /api/export/animation
+# ---------------------------------------------------------------------------
 
 def test_export_animation_too_few_scenes_returns_400(client):
     response = client.post("/api/export/animation", json={

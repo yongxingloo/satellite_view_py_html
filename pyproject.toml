@@ -22,3 +22,6 @@ include = ["satellite_view*"]
 
 [tool.setuptools.package-data]
 satellite_view = ["templates/*.html", "static/*.js", "static/*.css"]
+
+[tool.pytest.ini_options]
+testpaths = ["satellite_view/tests"]
