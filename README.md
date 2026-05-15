@@ -12,19 +12,11 @@ Note: the current version of the README is a preliminary one. Later, this will b
 
 ## Quick-start guide
 
-From the repository root, choose one of these run modes:
-
-1. **Installed package run (recommended)**
-   ```bash
-   pip install .
-   satellite_view
-   ```
-2. **Requirements-based run (no package install command)**
-   ```bash
-   pip install -r requirements.txt
-   python app.py
-   ```
-
+From the repository root run the following to install and use the browser interface:
+```bash
+  pip install .
+  satellite_view
+```
 
 ## Project structure
 
