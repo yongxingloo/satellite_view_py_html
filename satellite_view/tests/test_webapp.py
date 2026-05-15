@@ -2,7 +2,7 @@
 
 Run from the repository root with:
     pip install -e ".[test]"
-    pytest
+    pytest -v
 
 ## Note: Flask route tests and mocked external API calls can be found below
 ## the pure function tests. To extend further, consider adding:

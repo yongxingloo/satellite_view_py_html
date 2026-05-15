@@ -8,6 +8,8 @@ This project is a small satellite timelapse viewer built with a Flask backend an
 - inspect source URLs for the selected frame
 - export the current sequence as a ZIP of frames or an animated GIF
 
+Note: the current version of the README is a preliminary one. Later, this will be generated automatically from docstrings.
+
 ## Quick-start guide
 
 From the repository root, choose one of these run modes:
@@ -72,7 +74,7 @@ From the repository root, choose one of these run modes:
   The STAC item URL for the selected scene.
 
 - `frame_url`
-  The preferred preview/render URL used for the visible frame, often a TiTiler-generated URL.
+  The preferred preview/render URL used for the visible frame (TiTiler-generated URL).
 
 - `fallback_frame_url`
   A simpler preview image used when dynamic AOI rendering is unavailable.
@@ -80,12 +82,10 @@ From the repository root, choose one of these run modes:
 - `coverage_score`
   A fractional measure of how much of the selected AOI is covered by a given scene.
 
-## Why the code is commented
+## Instructions for testing
 
-The codebase now includes:
-
-- module-level explanations in Python
-- function docstrings in the backend
-- section comments in HTML, CSS, and JavaScript
-
-The aim is that someone new to the project can quickly understand both the high-level architecture and the intent of each major section without reverse-engineering everything from scratch.
+To run all tests for `webapp.py`, run the following from the repository root:
+```bash
+  pip install -e ".[test]"
+  pytest -v
+```
