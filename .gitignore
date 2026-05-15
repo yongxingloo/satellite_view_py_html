@@ -16,3 +16,5 @@ venv/
 # Distribution/build artifacts.
 build/
 *.egg-info/
+# VScode files
+.vscode/
