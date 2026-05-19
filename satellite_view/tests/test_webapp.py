@@ -17,6 +17,7 @@ Run from the repository root with:
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import date
+from urllib.parse import parse_qs, urlparse
 
 from satellite_view.webapp import (
     to_date_input,
@@ -31,6 +32,9 @@ from satellite_view.webapp import (
     resolve_frame_source,
     resolve_fallback_preview_url,
     resolve_renderable_item_url,
+    bbox_preview_dimensions,
+    build_titiler_preview_url,
+    build_planetary_computer_preview_url,
     collection_ids_for,
     parse_search_request,
     dedupe_scenes_by_day,
@@ -325,6 +329,46 @@ def test_resolve_renderable_item_url_landsat_via():
 def test_resolve_renderable_item_url_no_links():
     item = {"links": [], "collection": "sentinel-2-l2a"}
     assert resolve_renderable_item_url(item) == ""
+
+
+# ---------------------------------------------------------------------------
+# preview render dimensions
+# ---------------------------------------------------------------------------
+
+def test_bbox_preview_dimensions_square_bbox():
+    assert bbox_preview_dimensions([0.0, 0.0, 1.0, 1.0]) == (900, 900)
+
+def test_bbox_preview_dimensions_wide_bbox_preserves_aspect_ratio():
+    assert bbox_preview_dimensions([0.0, 0.0, 2.0, 1.0]) == (1800, 900)
+
+def test_bbox_preview_dimensions_tall_bbox_preserves_aspect_ratio():
+    assert bbox_preview_dimensions([0.0, 0.0, 1.0, 2.0]) == (900, 1800)
+
+def test_bbox_preview_dimensions_caps_very_long_bbox():
+    assert bbox_preview_dimensions([0.0, 0.0, 10.0, 1.0]) == (4096, 410)
+
+def test_build_titiler_preview_url_uses_aspect_aware_dimensions():
+    url = build_titiler_preview_url(
+        "http://item.json",
+        {"type": "single-asset", "asset_keys": ["visual"]},
+        [0.0, 0.0, 2.0, 1.0],
+    )
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    assert parsed.path.endswith("/1800x900.png")
+    assert query["width"] == ["1800"]
+    assert query["height"] == ["900"]
+
+def test_build_planetary_computer_preview_url_uses_aspect_aware_dimensions():
+    url = build_planetary_computer_preview_url(
+        {"collection": "landsat-c2-l2", "id": "scene-1"},
+        [0.0, 0.0, 1.0, 2.0],
+    )
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    assert parsed.path.endswith("/900x1800.png")
+    assert query["width"] == ["900"]
+    assert query["height"] == ["1800"]
 
 
 # ---------------------------------------------------------------------------
