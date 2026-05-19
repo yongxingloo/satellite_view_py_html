@@ -122,11 +122,13 @@ display: flex;
 .hero-panel h1 {
   margin-top: 0.45rem;
   font-size: clamp(2rem, 4vw, 3.25rem);
+  color: var(--bg-top);
 }
 
 .hero-copy,
 .panel-copy {
   max-width: 100%; /* Allows the text to spread across the new wider panels */
+  color: var(--bg-top);
 }
 .result-content p,
 .empty-state {
