@@ -680,9 +680,11 @@ display: flex;
 
 .player-stage img {
   display: none;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: min(72vh, 720px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .player-placeholder {

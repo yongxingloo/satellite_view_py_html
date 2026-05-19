@@ -32,6 +32,9 @@ DEFAULT_ZOOM = 12
 DEFAULT_COLLECTION = "sentinel-2-l2a"
 SUPPORTED_COLLECTIONS = {"sentinel-2-l2a", "landsat-c2-l2", "merged"}
 SUPPORTED_SEQUENCE_MODES = {"balanced", "strict", "dense"}
+PREVIEW_BASE_PIXELS = 900
+PREVIEW_MAX_PIXELS = 4096
+PREVIEW_MIN_PIXELS = 64
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = PACKAGE_DIR / "templates"
@@ -292,6 +295,25 @@ def resolve_renderable_item_url(item: dict[str, Any]) -> str:
     return next((link.get("href", "") for link in links if link.get("rel") == "self"), "")
 
 
+def bbox_preview_dimensions(bbox: list[float]) -> tuple[int, int]:
+    """Compute preview pixel dimensions that preserve the AOI aspect ratio."""
+    west, south, east, north = bbox
+    bbox_width = max(east - west, 0.0)
+    bbox_height = max(north - south, 0.0)
+    if bbox_width <= 0 or bbox_height <= 0:
+        return PREVIEW_BASE_PIXELS, PREVIEW_BASE_PIXELS
+
+    aspect_ratio = bbox_width / bbox_height
+    if aspect_ratio >= 1:
+        width = min(PREVIEW_MAX_PIXELS, round(PREVIEW_BASE_PIXELS * aspect_ratio))
+        height = round(width / aspect_ratio)
+    else:
+        height = min(PREVIEW_MAX_PIXELS, round(PREVIEW_BASE_PIXELS / aspect_ratio))
+        width = round(height * aspect_ratio)
+
+    return max(PREVIEW_MIN_PIXELS, width), max(PREVIEW_MIN_PIXELS, height)
+
+
 def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[float]) -> str:
     """Build a TiTiler preview URL for one scene.
 
@@ -304,10 +326,11 @@ def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[
         A TiTiler URL that renders the requested AOI.
     """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
+    width, height = bbox_preview_dimensions(bbox)
     params: list[tuple[str, str]] = [
         ("url", item_url),
-        ("width", "900"),
-        ("height", "900"),
+        ("width", str(width)),
+        ("height", str(height)),
         ("rescale", "0,4000"),
         ("coord_crs", "epsg:4326"),
         ("dst_crs", "epsg:4326"),
@@ -318,7 +341,7 @@ def build_titiler_preview_url(item_url: str, source: dict[str, Any], bbox: list[
         params.append(("asset_as_band", "true"))
         params.extend([("rescale", "0,4000"), ("rescale", "0,4000")])
     prepared = requests.PreparedRequest()
-    prepared.prepare_url(f"{TITILER_STAC_API}/{bbox_path}/900x900.png", params)
+    prepared.prepare_url(f"{TITILER_STAC_API}/{bbox_path}/{width}x{height}.png", params)
     return prepared.url or ""
 
 
@@ -333,11 +356,12 @@ def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]
         A Planetary Computer preview URL.
     """
     bbox_path = ",".join(f"{value:.5f}" for value in bbox)
+    width, height = bbox_preview_dimensions(bbox)
     params = [
         ("collection", item["collection"]),
         ("item", item["id"]),
-        ("width", "900"),
-        ("height", "900"),
+        ("width", str(width)),
+        ("height", str(height)),
         ("format", "png"),
         ("coord_crs", "epsg:4326"),
         ("dst_crs", "epsg:4326"),
@@ -348,7 +372,7 @@ def build_planetary_computer_preview_url(item: dict[str, Any], bbox: list[float]
         ("asset_as_band", "true"),
     ]
     prepared = requests.PreparedRequest()
-    prepared.prepare_url(f"{PLANETARY_COMPUTER_DATA_API}/bbox/{bbox_path}/900x900.png", params)
+    prepared.prepare_url(f"{PLANETARY_COMPUTER_DATA_API}/bbox/{bbox_path}/{width}x{height}.png", params)
     return prepared.url or ""
 
 
